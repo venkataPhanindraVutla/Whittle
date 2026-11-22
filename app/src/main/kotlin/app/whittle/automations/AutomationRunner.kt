@@ -103,7 +103,8 @@ class AutomationRunner(
         }
         val text = (listOf(messages.automationEventsIntro) + lines).joinToString("\n")
         val label = events.map { it.sourceLabel.ifBlank { it.source } }
-        return pastedOutput(messages, PastedKind.PHONE_EVENT, label.firstOrNull { it.isNotBlank() }.orEmpty(), text, maxPastedChars)
+        val kind = if (events.any { it.kind == EventKind.SMS || it.kind == EventKind.NOTIFICATION }) PastedKind.PHONE_EVENT else PastedKind.PHONE_STATE
+        return pastedOutput(messages, kind, label.firstOrNull { it.isNotBlank() }.orEmpty(), text, maxPastedChars)
     }
 
     private suspend fun start(automation: Automation, pasted: List<ContentBlock.Text> = emptyList()): RunNowResult {

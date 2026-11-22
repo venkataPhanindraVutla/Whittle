@@ -430,6 +430,7 @@ class AgentRunnerTest {
         assertEquals("screen of Gmail", (pastedOutput(testMessages, PastedKind.SCREEN, "Gmail", "x", 10).provenance as Provenance.Untrusted).sourceLabel)
         // Only the phone's events are someone's personal data; a crash or a log isn't.
         assertTrue(pastedOutput(testMessages, PastedKind.PHONE_EVENT, "HDFCBK", "x", 10).personalData)
+        assertFalse(pastedOutput(testMessages, PastedKind.PHONE_STATE, "Home", "x", 10).personalData)
         assertFalse(block.personalData)
     }
 

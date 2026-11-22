@@ -362,6 +362,19 @@ class AutomationRunnerTest {
     }
 
     @Test
+    fun `a charging event is untrusted but not personal data`() = runTest {
+        val (automations, runner) = setUp()
+        val automation = assertIs<SaveResult.Saved>(
+            automations.save(automations.draft("Night", "Plan").copy(schedule = null, trigger = Trigger.Charging(Edge.START))),
+        ).automation
+        gate.offer(automation.id, PhoneEvent(EventKind.CHARGING, "", "", now, Edge.START))
+        runner.due(automation.id, now)
+        val block = chat.pasted.single().single()
+        assertIs<Provenance.Untrusted>(block.provenance)
+        assertFalse(block.personalData)
+    }
+
+    @Test
     fun `an event run's events are untrusted personal data`() = runTest {
         val (automations, runner) = setUp()
         val automation = automations.savedEvent()
