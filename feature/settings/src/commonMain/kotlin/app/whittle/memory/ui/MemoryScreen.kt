@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -167,50 +166,60 @@ private fun MemoryList(host: MemoryHost, onBack: () -> Unit, onOpen: (MemoryDraf
                         }
                     }
                 }
-                item(key = "suggest-switch") {
-                    SettingsToggleRow(
-                        icon = "lightbulb",
-                        title = stringResource(Res.string.memory_suggest_title),
-                        subtitle = if (state.suggesting == true) stringResource(Res.string.memory_suggest_note) else null,
-                        checked = state.suggesting == true,
-                        onCheckedChange = { on -> host.act(MemoryAction.Suggest(on)) },
-                        shape = segmentedShape(0, 1),
-                        enabled = state.suggesting != null,
-                        modifier = Modifier.padding(bottom = WhittleSpace.s),
-                    )
-                }
-                if (suggested.isNotEmpty()) {
-                    item(key = "suggested") {
-                        SettingsSection(
-                            title = stringResource(Res.string.memory_suggested),
-                            description = stringResource(Res.string.memory_suggested_note),
-                            modifier = Modifier.padding(top = WhittleSpace.l, bottom = WhittleSpace.s),
-                        ) {
-                            keepIssue?.let { issue -> SupportingNote("info", stringResource(keepIssueText(issue))) }
-                            Column(verticalArrangement = Arrangement.spacedBy(WhittleSpace.s)) {
-                                suggested.forEach { suggestion ->
-                                    key(suggestion.id) {
-                                        Suggestion(
-                                            suggestion = suggestion,
-                                            replaced = memories.firstOrNull { it.id == suggestion.replaces },
-                                            onKeep = {
-                                                keepIssue = null
-                                                scope.launch { keepIssue = host.save(null, suggestion.text, suggestion.id) }
-                                            },
-                                            onEdit = { onOpen(MemoryDraft(null, suggestion.text, suggestion)) },
-                                            onDismiss = {
-                                                keepIssue = null
-                                                host.act(MemoryAction.Dismiss(suggestion.id))
-                                            },
-                                        )
-                                    }
+            }
+            item(key = "suggest-switch") {
+                SettingsToggleRow(
+                    icon = "lightbulb",
+                    title = stringResource(Res.string.memory_suggest_title),
+                    subtitle = if (state.suggesting == true) stringResource(Res.string.memory_suggest_note) else null,
+                    checked = state.suggesting == true,
+                    onCheckedChange = { on -> host.act(MemoryAction.Suggest(on)) },
+                    shape = segmentedShape(0, 1),
+                    enabled = state.suggesting != null,
+                    modifier = Modifier.padding(bottom = WhittleSpace.s),
+                )
+            }
+            if (suggested.isNotEmpty()) {
+                item(key = "suggested") {
+                    SettingsSection(
+                        title = stringResource(Res.string.memory_suggested),
+                        description = stringResource(Res.string.memory_suggested_note),
+                        modifier = Modifier.padding(top = WhittleSpace.l, bottom = WhittleSpace.s),
+                    ) {
+                        keepIssue?.let { issue -> SupportingNote("info", stringResource(keepIssueText(issue))) }
+                        Column(verticalArrangement = Arrangement.spacedBy(WhittleSpace.s)) {
+                            suggested.forEach { suggestion ->
+                                key(suggestion.id) {
+                                    Suggestion(
+                                        suggestion = suggestion,
+                                        replaced = memories.firstOrNull { it.id == suggestion.replaces },
+                                        onKeep = {
+                                            keepIssue = null
+                                            scope.launch { keepIssue = host.save(null, suggestion.text, suggestion.id) }
+                                        },
+                                        onEdit = { onOpen(MemoryDraft(null, suggestion.text, suggestion)) },
+                                        onDismiss = {
+                                            keepIssue = null
+                                            host.act(MemoryAction.Dismiss(suggestion.id))
+                                        },
+                                    )
                                 }
                             }
                         }
                     }
                 }
-                if (memories.isEmpty() && suggested.isEmpty()) {
-                    item { EmptyMemory(state.ideas) { idea -> onOpen(MemoryDraft(null, idea.start)) } }
+            }
+            if (memories.isEmpty() && suggested.isEmpty()) {
+                item { EmptyMemory(state.ideas) { idea -> onOpen(MemoryDraft(null, idea.start)) } }
+            }
+            listOf(Res.string.memory_today to today, Res.string.memory_earlier to earlier).filter { it.second.isNotEmpty() }.forEach { (title, group) ->
+                item(key = title.key) {
+                    Text(
+                        stringResource(title),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = WhittleSpace.m, top = WhittleSpace.l, bottom = WhittleSpace.s),
+                    )
                 }
                 itemsIndexed(group, key = { _, memory -> memory.id }) { index, memory ->
                     MemoryRow(
@@ -399,46 +408,45 @@ private fun MemoryEditor(host: MemoryHost, draft: MemoryDraft, onClose: () -> Un
         },
     ) { padding ->
         // On a wide window the page reads in a centred column; the whole width still scrolls.
-        ReadingWidth(WhittleSpace.l, Modifier.padding(padding).fillMaxSize().imePadding()) { inset ->
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scroll)
-                    .padding(start = inset, end = inset, top = WhittleSpace.s, bottom = WhittleSpace.xxxl),
-                verticalArrangement = Arrangement.spacedBy(WhittleSpace.xxl),
-            ) {
-                replaced?.let {
-                    Text(
-                        stringResource(Res.string.memory_suggested_replaces, it.text),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.userContent(),
-                    )
-                }
-                WhittleFilledField(
-                    value = text,
-                    onValueChange = { text = if (state.maxItemChars > 0) it.take(state.maxItemChars) else it; issue = null },
-                    label = stringResource(Res.string.memory_field),
-                    minLines = FIELD_LINES,
-                    enabled = !saving,
-                    hint = stringResource(Res.string.memory_field_hint),
-                    counter = stringResource(Res.string.memory_counter, text.length, state.maxItemChars),
-                    error = issue?.let {
-                        stringResource(if (draft.suggestion != null) keepIssueText(it) else if (it == MemoryIssue.Full) Res.string.memory_full else Res.string.memory_save_failed)
-                    },
-                    autoFocus = saved == null,
+        ReadingScrollColumn(
+            minInset = WhittleSpace.l,
+            modifier = Modifier.padding(padding).fillMaxSize().imePadding(),
+            scroll = scroll,
+            top = WhittleSpace.s,
+            bottom = WhittleSpace.xxxl,
+            verticalArrangement = Arrangement.spacedBy(WhittleSpace.xxl),
+        ) {
+            replaced?.let {
+                Text(
+                    stringResource(Res.string.memory_suggested_replaces, it.text),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
                     modifier = Modifier.userContent(),
                 )
-                val facts = listOfNotNull(
-                    saved?.let {
-                        Triple("history", stringResource(Res.string.memory_saved_at, savedOn(it.savedAtMillis)), stringResource(Res.string.memory_saved_note))
-                    },
-                    Triple("lock", stringResource(Res.string.memory_private), stringResource(Res.string.memory_private_note)),
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(WhittleSpace.hairline)) {
-                    facts.forEachIndexed { index, (icon, title, subtitle) ->
-                        SettingsRow(icon = icon, title = title, subtitle = subtitle, shape = segmentedShape(index, facts.size))
-                    }
+            }
+            WhittleFilledField(
+                value = text,
+                onValueChange = { text = if (state.maxItemChars > 0) it.take(state.maxItemChars) else it; issue = null },
+                label = stringResource(Res.string.memory_field),
+                minLines = FIELD_LINES,
+                enabled = !saving,
+                hint = stringResource(Res.string.memory_field_hint),
+                counter = stringResource(Res.string.memory_counter, text.length, state.maxItemChars),
+                error = issue?.let {
+                    stringResource(if (draft.suggestion != null) keepIssueText(it) else if (it == MemoryIssue.Full) Res.string.memory_full else Res.string.memory_save_failed)
+                },
+                autoFocus = saved == null,
+                modifier = Modifier.userContent(),
+            )
+            val facts = listOfNotNull(
+                saved?.let {
+                    Triple("history", stringResource(Res.string.memory_saved_at, savedOn(it.savedAtMillis)), stringResource(Res.string.memory_saved_note))
+                },
+                Triple("lock", stringResource(Res.string.memory_private), stringResource(Res.string.memory_private_note)),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(WhittleSpace.hairline)) {
+                facts.forEachIndexed { index, (icon, title, subtitle) ->
+                    SettingsRow(icon = icon, title = title, subtitle = subtitle, shape = segmentedShape(index, facts.size))
                 }
             }
         }
