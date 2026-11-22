@@ -3,7 +3,12 @@ package app.whittle.automations
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +34,8 @@ import app.whittle.automations.events.AndroidPhoneReader
 import app.whittle.automations.events.EventSources
 import app.whittle.automations.events.capabilityAllowed
 import app.whittle.background.rememberNotificationPermissionRequest
+import app.whittle.R
+import app.whittle.phone.PhoneActionsConfig
 import app.whittle.phone.rememberCapabilityRequest
 import app.whittle.tools.api.CapabilityId
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +95,6 @@ class PhoneAutomationsHost(
 
     override suspend fun save(automation: AutomationEntry): AutomationSave = when (val result = automations.save(automation.toAutomation())) {
         is SaveResult.Saved -> {
-            switchOnFor(result.automation.trigger)
             AutomationSave.Saved(entryOf(result.automation, state.value.automations.associate { it.id to it.skippedToday }, phoneOff()))
         }
         is SaveResult.Refused -> AutomationSave.Refused(ISSUES.getValue(result.problem))
@@ -100,15 +106,6 @@ class PhoneAutomationsHost(
         RunNowResult.BUSY -> RunNow.Busy
         RunNowResult.NO_MODEL -> RunNow.NoModel
         RunNowResult.NOT_FOUND -> RunNow.NotFound
-    }
-
-    /**
-     * Saving an automation on an event is asking for it: the switches in Settings › On this phone that cover what it
-     * needs go on, as switching one on there would. What Android grants is asked for next, by the editor.
-     */
-    private suspend fun switchOnFor(trigger: Trigger?) {
-        val needed = trigger?.capabilities(events.capabilities).orEmpty()
-        graph.phoneActions.switches.filter { switch -> switch.capabilities.any { it in needed } }.forEach { graph.settings.setPhoneFeature(it.id, true) }
     }
 
     private fun phoneOff(): Set<String> = graph.currentSettings.value?.phoneOff.orEmpty()
@@ -189,7 +186,34 @@ fun rememberPhoneAutomationsPlatform(graph: AppGraph, sources: EventSources): Au
     val context = LocalContext.current
     // The answer goes to whichever row asked last.
     var answer by remember { mutableStateOf<(Boolean) -> Unit>({}) }
+    val scope = rememberCoroutineScope()
     val capabilityRequest = rememberCapabilityRequest(graph.healthConnect) { granted -> sources.recheck(); answer(granted) }
+    // Switches turned off in Settings that what's being asked for needs: the user says whether they go back on.
+    var switchesOff by remember { mutableStateOf<Pair<List<PhoneActionsConfig.Switch>, List<CapabilityId>>?>(null) }
+    val request: (List<String>, (Boolean) -> Unit) -> Unit = { capabilities, onDone ->
+        answer = onDone
+        val ids = capabilities.map(::CapabilityId)
+        val off = graph.currentSettings.value?.phoneOff.orEmpty()
+        val blocking = graph.phoneActions.switches.filter { it.id in off && it.capabilities.any { capability -> capability in capabilities } }
+        if (blocking.isEmpty()) capabilityRequest(ids) else switchesOff = blocking to ids
+    }
+    switchesOff?.let { (blocking, ids) ->
+        AlertDialog(
+            onDismissRequest = { switchesOff = null; answer(false) },
+            title = { Text(stringResource(R.string.phone_turn_on_title, blocking.joinToString { it.title })) },
+            text = { Text(stringResource(R.string.phone_turn_on_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    switchesOff = null
+                    scope.launch {
+                        blocking.forEach { graph.settings.setPhoneFeature(it.id, true) }
+                        capabilityRequest(ids)
+                    }
+                }) { Text(stringResource(R.string.phone_turn_on)) }
+            },
+            dismissButton = { TextButton(onClick = { switchesOff = null; answer(false) }) { Text(stringResource(R.string.phone_not_now)) } },
+        )
+    }
     val requestNotifications = rememberNotificationPermissionRequest()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { sources.recheck() }
     val readings = remember(context) {
@@ -202,7 +226,7 @@ fun rememberPhoneAutomationsPlatform(graph: AppGraph, sources: EventSources): Au
     }
     return remember(context, capabilityRequest, requestNotifications) {
         AutomationsPlatform(
-            requestCapabilities = { capabilities, onDone -> answer = onDone; capabilityRequest(capabilities.map(::CapabilityId)) },
+            requestCapabilities = request,
             requestNotifications = requestNotifications,
             toast = { message -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() },
             phone = readings,
