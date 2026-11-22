@@ -52,6 +52,12 @@ data class ClaudeCodeConfig(
     val allowedToolsArguments: String,
     /** Whittle's tool ids an automation can pre-approve, by the Claude Code tools that do the same. */
     val preApprovedTools: Map<String, List<String>>,
+    /**
+     * Whittle's tool ids that stay out of [preApprovedTools] for a run that holds untrusted content (a text, a web page),
+     * so they ask first: Claude Code has no notion of a tainted run, and reading files then fetching a web address is how
+     * what a stranger wrote would carry the user's files out.
+     */
+    val askWhenUntrusted: Set<String>,
     /** Claude Code's tools that write a file, by the argument naming it, so its changes show in Files. */
     val fileArguments: Map<String, String>,
     /** Hands Claude Code the user's connections; `{{file}}` is the Linux path of their MCP config, made per task. */
@@ -95,6 +101,7 @@ data class ClaudeCodeConfig(
         require(PromptTemplate(FILE, mcpConfigArguments).placeholders == setOf(FILE_PATH)) { "mcpConfigArguments must take {{$FILE_PATH}} and nothing else" }
         require(PromptTemplate(FILE, disallowedToolsArguments).placeholders == setOf(TOOLS)) { "disallowedToolsArguments must take {{$TOOLS}} and nothing else" }
         require(PromptTemplate(FILE, mcpToolName).placeholders == setOf(SERVER, TOOL)) { "mcpToolName must take {{$SERVER}} and {{$TOOL}}" }
+        require(preApprovedTools.keys.containsAll(askWhenUntrusted)) { "askWhenUntrusted names tools that preApprovedTools doesn't" }
         require(mcpTransports.keys == McpTransportKind.entries.toSet()) { "mcpTransports must name every transport" }
         require(taskFilesDirectory.startsWith("/")) { "taskFilesDirectory must be an absolute Linux path" }
         require(signInMethods.isNotEmpty()) { "claude-code.json needs a sign-in method" }
@@ -108,7 +115,8 @@ data class ClaudeCodeConfig(
      * [preApproved] (Whittle's tool ids, from an automation) run without asking. [mcpConfig] is the Linux path of
      * the task's MCP config, when the user has connections; the [blocked] tools are kept from Claude Code.
      * [apiKeyFile] is the Linux path of a file holding the user's API key: read into Claude Code's environment, then
-     * removed, so the key never goes on the command line.
+     * removed, so the key never goes on the command line. A run that [holdsUntrusted] content leaves [askWhenUntrusted]
+     * out of what runs without asking.
      */
     fun run(
         model: String,
@@ -117,12 +125,13 @@ data class ClaudeCodeConfig(
         mcpConfig: String? = null,
         blocked: List<String> = emptyList(),
         apiKeyFile: String? = null,
+        holdsUntrusted: Boolean = false,
     ): String {
         val parts = mutableListOf<String>()
         apiKeyFile?.let { parts += apiKey.runPrefix.replace(placeholder(FILE_PATH), quoted(it)) }
         parts += runCommand.replace(placeholder(MODEL), quoted(model))
         session?.let { parts += resumeArguments.replace(placeholder(SESSION), quoted(it)) }
-        val tools = preApproved.flatMap { preApprovedTools[it].orEmpty() }.distinct()
+        val tools = preApproved.filter { !holdsUntrusted || it !in askWhenUntrusted }.flatMap { preApprovedTools[it].orEmpty() }.distinct()
         if (tools.isNotEmpty()) parts += allowedToolsArguments.replace(placeholder(TOOLS), quoted(tools.joinToString(TOOL_SEPARATOR)))
         mcpConfig?.let { parts += mcpConfigArguments.replace(placeholder(FILE_PATH), quoted(it)) }
         if (blocked.isNotEmpty()) parts += disallowedToolsArguments.replace(placeholder(TOOLS), quoted(blocked.joinToString(TOOL_SEPARATOR)))

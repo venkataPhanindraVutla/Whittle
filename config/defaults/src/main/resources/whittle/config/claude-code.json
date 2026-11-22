@@ -63,6 +63,11 @@
       "MultiEdit"
     ]
   },
+  "askWhenUntrusted": [
+    "web_fetch",
+    "list_files",
+    "read_file"
+  ],
   "fileArguments": {
     "Write": "file_path",
     "Edit": "file_path",

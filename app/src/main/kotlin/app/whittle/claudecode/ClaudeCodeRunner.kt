@@ -94,6 +94,7 @@ class ClaudeCodeRunner(
             mcpConfig = handed?.file?.path,
             blocked = handed?.blocked.orEmpty(),
             apiKeyFile = key?.path,
+            holdsUntrusted = (request.priorMessages + request.userMessage).any(Message::carriesUntrustedContent),
         )
         val process = when (val started = InteractiveCommand.start(environment, command, folder, network = true)) {
             is Outcome.Failure -> return send(RunEvent.Failed(started.error))

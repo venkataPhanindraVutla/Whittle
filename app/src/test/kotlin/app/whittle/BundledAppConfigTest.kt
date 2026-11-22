@@ -512,3 +512,5 @@ class BundledAppConfigTest {
         assertTrue("--no-install-recommends" in config.tailscale.installCommand)
     }
 }
+        // Reading and the web are asked about once a run holds a text: Claude Code can't tell that the run is steered.
+        assertEquals(setOf("web_fetch", "list_files", "read_file"), config.askWhenUntrusted)

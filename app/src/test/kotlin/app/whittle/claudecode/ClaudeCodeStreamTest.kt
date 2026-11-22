@@ -22,7 +22,7 @@ class ClaudeCodeStreamTest {
         ),
         runCommand = "claude -p --model {{model}}", resumeArguments = "--resume {{session}}",
         allowedToolsArguments = "--allowedTools {{tools}}",
-        preApprovedTools = mapOf("read_file" to listOf("Read"), "edit_file" to listOf("Edit", "MultiEdit")), fileArguments = emptyMap(),
+        preApprovedTools = mapOf("read_file" to listOf("Read"), "edit_file" to listOf("Edit", "MultiEdit")), askWhenUntrusted = setOf("read_file"), fileArguments = emptyMap(),
         mcpConfigArguments = "--mcp-config {{file}}", disallowedToolsArguments = "--disallowedTools {{tools}}",
         mcpToolName = "mcp__{{server}}__{{tool}}", mcpTransports = mapOf(McpTransportKind.STREAMABLE_HTTP to "http", McpTransportKind.SSE to "sse"),
         taskFilesDirectory = "/root/.whittle",
@@ -121,6 +121,13 @@ class ClaudeCodeStreamTest {
             "claude -p --model 'opus' --allowedTools 'Read,Edit,MultiEdit'",
             config.run("opus", null, preApproved = setOf("read_file", "edit_file", "device_clock_now")),
         )
+    }
+
+    @Test
+    fun `a run that holds a text gets no pre-allowed read or web tools`() {
+        val chosen = setOf("read_file", "edit_file", "device_clock_now")
+        assertEquals("claude -p --model 'opus' --allowedTools 'Edit,MultiEdit'", config.run("opus", null, preApproved = chosen, holdsUntrusted = true))
+        assertEquals("claude -p --model 'opus'", config.run("opus", null, preApproved = setOf("read_file"), holdsUntrusted = true))
     }
 
     @Test
