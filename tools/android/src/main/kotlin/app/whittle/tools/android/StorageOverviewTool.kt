@@ -29,11 +29,11 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** What the overview may spend: the biggest [maxFolders] are listed, scanning stops after [scanMillis], "old" means [oldDays]. */
-data class StorageLimits(val maxFolders: Int, val scanMillis: Long, val oldDays: Int)
+data class StorageLimits(val maxFolders: Int, val scanMillis: Long, val oldDays: Int, val protectedFolders: List<String> = emptyList())
 
 /**
  * Answers "what's using my storage": total and free space, the biggest folders, what photos, video and audio take,
- * and how much sits in Downloads untouched. Sizes only; it never reads a file's contents.
+ * and how much sits in Downloads untouched, leaving out other apps' folders (`protectedFolders`). Sizes only; it never reads a file's contents.
  */
 class StorageOverviewTool(
     private val context: Context,
@@ -42,6 +42,7 @@ class StorageOverviewTool(
     private val clock: EpochClock,
 ) : Tool {
     override val definition = DEFINITION
+    private val skipped = ProtectedFolders(limits.protectedFolders)
 
     override suspend fun execute(arguments: JsonObject, context: ToolExecutionContext): ToolOutput {
         val root = storage.root() ?: return ToolJson.missing(AndroidCapabilities.STORAGE)
@@ -53,7 +54,7 @@ class StorageOverviewTool(
             val media = mediaBytes(deadline)
             val oldCutoff = clock.nowMillis() - TimeUnit.DAYS.toMillis(limits.oldDays.toLong())
             val downloads = bytesOlderThan(File(root, Environment.DIRECTORY_DOWNLOADS), oldCutoff, deadline, clock::nowMillis)
-            val folders = topFolders(root, limits.maxFolders, deadline, clock::nowMillis)
+            val folders = topFolders(root.canonicalFile, limits.maxFolders, deadline, clock::nowMillis) { skipped.contains(root, it) }
             buildJsonObject {
                 totals()?.let { (total, free) ->
                     put(TOTAL, total)

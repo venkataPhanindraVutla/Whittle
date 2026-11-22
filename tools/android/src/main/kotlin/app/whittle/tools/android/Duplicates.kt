@@ -5,6 +5,27 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.security.MessageDigest
 
+/** A file of a duplicate group as find_files saw it: its size and modified time then. */
+data class Copy(val file: File, val bytes: Long, val modified: Long)
+
+/**
+ * The duplicate groups find_files last listed, up to [maxFiles] files, so delete_files can tell a file that has
+ * copies from one that doesn't. When a new listing wouldn't fit, the older ones are forgotten.
+ */
+class DuplicateGroups(private val maxFiles: Int) {
+    private val byFile = HashMap<File, List<Copy>>()
+
+    @Synchronized
+    fun remember(groups: List<List<Copy>>) {
+        if (byFile.size + groups.sumOf { it.size } > maxFiles) byFile.clear()
+        groups.forEach { group -> group.forEach { byFile[it.file] = group } }
+    }
+
+    /** The group [file] was listed in, or null if find_files never listed it as a copy. */
+    @Synchronized
+    fun of(file: File): List<Copy>? = byFile[file]
+}
+
 /** Groups of identical files; [partial] means time or the hashing budget ran out, so more may exist. */
 data class Duplicates(val groups: List<List<File>>, val partial: Boolean)
 
@@ -17,10 +38,11 @@ fun duplicateGroups(files: List<File>): List<List<File>> = findDuplicates(files.
  * then the SHA-256 of the first and last 64 KiB, then the full SHA-256 for what still collides. Empty files are
  * skipped and unreadable ones left out. Reading stops when [now] reaches [deadlineMillis] (checked between chunks) or
  * after [maxHashBytes] have been read in all, and the result is then partial: groups already confirmed are kept, but
- * a file is never reported as a copy on a hash that wasn't finished.
+ * a file is never reported as a copy on a hash that wasn't finished. [ensureActive] is called between chunks and may
+ * throw to cancel.
  */
-fun findDuplicates(files: List<Pair<File, Long>>, deadlineMillis: Long, now: () -> Long, maxHashBytes: Long): Duplicates {
-    val budget = HashBudget(deadlineMillis, now, maxHashBytes)
+fun findDuplicates(files: List<Pair<File, Long>>, deadlineMillis: Long, now: () -> Long, maxHashBytes: Long, ensureActive: () -> Unit = {}): Duplicates {
+    val budget = HashBudget(deadlineMillis, now, maxHashBytes, ensureActive)
     val groups = mutableListOf<List<File>>()
     val bySize = files.filter { it.second > 0 }.groupBy({ it.second }, { it.first })
     for ((size, sameSize) in bySize) {
@@ -47,8 +69,8 @@ fun findDuplicates(files: List<Pair<File, Long>>, deadlineMillis: Long, now: () 
 data class PossibleCopies(val identical: List<List<File>>, val untold: List<List<File>>)
 
 /** [PossibleCopies] among [files], hashing them as [findDuplicates] does, within the same kind of budget. */
-fun possibleCopies(files: List<Pair<File, Long>>, deadlineMillis: Long, now: () -> Long, maxHashBytes: Long): PossibleCopies {
-    val budget = HashBudget(deadlineMillis, now, maxHashBytes)
+fun possibleCopies(files: List<Pair<File, Long>>, deadlineMillis: Long, now: () -> Long, maxHashBytes: Long, ensureActive: () -> Unit = {}): PossibleCopies {
+    val budget = HashBudget(deadlineMillis, now, maxHashBytes, ensureActive)
     val identical = mutableListOf<List<File>>()
     val untold = mutableListOf<List<File>>()
     val bySize = files.filter { it.second > 0 }.groupBy({ it.second }, { it.first })
@@ -79,12 +101,14 @@ private const val CHUNK_BYTES = 1024 * 1024
 private fun List<File>.groupByHash(hash: (File) -> String?): List<List<File>> =
     mapNotNull { file -> hash(file)?.let { it to file } }.groupBy({ it.first }, { it.second }).values.filter { it.size > 1 }
 
-private class HashBudget(private val deadlineMillis: Long, private val now: () -> Long, private var bytesLeft: Long) {
+/** [ensureActive] is called before every chunk and throws to cancel the hashing. */
+private class HashBudget(private val deadlineMillis: Long, private val now: () -> Long, private var bytesLeft: Long, private val ensureActive: () -> Unit) {
     var stopped = false
         private set
 
     /** How many of [wanted] bytes may be read now; 0 once time or the byte cap is up. */
     fun allow(wanted: Int): Int {
+        ensureActive()
         if (stopped) return 0
         if (now() >= deadlineMillis || bytesLeft <= 0) {
             stopped = true

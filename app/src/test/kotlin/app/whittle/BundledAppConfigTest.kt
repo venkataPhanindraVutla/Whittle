@@ -159,6 +159,10 @@ class BundledAppConfigTest {
         assertTrue(phone.storage.maxDeletePerCall in 1..50, "A delete card must stay short enough to read through")
         // Other apps' own files: on Android 10 and older all-files access reaches them, and nothing there is the user's to tidy.
         assertTrue(phone.storage.protectedFolders.containsAll(listOf("Android/data", "Android/obb", "Android/media")))
+        // The delete card waits on its duplicate check, so that gets a smaller budget than a search, and never a bigger one.
+        assertTrue(phone.storage.previewMillis < phone.storage.scanMillis && phone.storage.previewHashBytes < phone.storage.maxHashBytes)
+        assertFailsWith<IllegalArgumentException> { phone.copy(storage = phone.storage.copy(previewMillis = phone.storage.scanMillis + 1)) }
+        assertFailsWith<IllegalArgumentException> { phone.copy(storage = phone.storage.copy(previewHashBytes = 0)) }
         // find_files' kinds come only from storage.types, so a kind named like the catch-all, or an extension in two kinds, is refused.
         assertFailsWith<IllegalArgumentException> { phone.copy(storage = phone.storage.copy(types = phone.storage.types + ("other" to listOf("bin")))) }
         assertFailsWith<IllegalArgumentException> { phone.copy(storage = phone.storage.copy(types = phone.storage.types + ("photo" to listOf("jpg")))) }

@@ -10,7 +10,10 @@ import app.whittle.tools.api.ToolExecutionContext
 import app.whittle.tools.api.ToolId
 import app.whittle.tools.api.ToolOutput
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -27,6 +30,7 @@ import kotlinx.serialization.json.putJsonArray
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.util.Locale
 import java.util.PriorityQueue
 import java.util.concurrent.TimeUnit
 
@@ -34,7 +38,30 @@ import java.util.concurrent.TimeUnit
  * What find_files may spend: lists hold [maxResults], the whole call stops after [scanMillis], at most [maxHashBytes]
  * are read to find copies, and copies are looked for among the [maxMatches] largest matching files.
  */
-data class FindFilesLimits(val maxResults: Int, val scanMillis: Long, val maxHashBytes: Long, val maxMatches: Int)
+data class FindFilesLimits(
+    val maxResults: Int,
+    val scanMillis: Long,
+    val maxHashBytes: Long,
+    val maxMatches: Int,
+    val protectedFolders: List<String> = emptyList(),
+)
+
+/**
+ * Folders under shared storage (relative to it, `/`-separated) where other apps keep their own files, matched without
+ * regard to case since /sdcard does. Searches skip them and deletes refuse them.
+ */
+class ProtectedFolders(folders: List<String>) {
+    private val prefixes = folders.map { it.trim('/').lowercase(Locale.ROOT) }
+
+    /** Whether [relative] is or lies under a protected folder. */
+    fun contains(relative: String): Boolean {
+        val path = relative.lowercase(Locale.ROOT)
+        return prefixes.any { path == it || path.startsWith("$it/") }
+    }
+
+    /** Whether [file], somewhere under [root], is or lies under a protected folder. */
+    fun contains(root: File, file: File): Boolean = contains(relativePath(root, file))
+}
 
 /** Extensions per kind of file, as `storage.types` in phone-actions.json names them; anything else is [OTHER]. */
 class FileTypes(private val extensions: Map<String, List<String>>) {
@@ -64,9 +91,18 @@ data class FindResult(val files: List<FoundFile>, val matched: Int, val partial:
 /**
  * The [keep] largest files under [folder] that pass [filter], largest first, and how many passed. Only those [keep] are
  * held while walking, however many match. Symlinks aren't followed and unreadable folders are skipped. The walk stops
- * when [now] reaches [deadlineMillis] (checked at every entry) and is then partial.
+ * when [now] reaches [deadlineMillis] (checked at every entry) and is then partial. Entries [skip] says yes to are
+ * neither entered nor counted.
  */
-fun findFiles(folder: File, filter: FileFilter, types: FileTypes, deadlineMillis: Long, now: () -> Long, keep: Int = Int.MAX_VALUE): FindResult {
+fun findFiles(
+    folder: File,
+    filter: FileFilter,
+    types: FileTypes,
+    deadlineMillis: Long,
+    now: () -> Long,
+    keep: Int = Int.MAX_VALUE,
+    skip: (File) -> Boolean = { false },
+): FindResult {
     // Smallest on top, so it's the one to drop when a bigger match comes and there's no room.
     val found = PriorityQueue<FoundFile>(compareBy { it.bytes })
     var matched = 0
@@ -79,6 +115,7 @@ fun findFiles(folder: File, filter: FileFilter, types: FileTypes, deadlineMillis
                 return
             }
             if (Files.isSymbolicLink(entry.toPath())) continue
+            if (skip(entry)) continue
             if (entry.isDirectory) {
                 walk(entry)
                 continue
@@ -148,9 +185,11 @@ class FindFilesTool(
     private val storage: SharedStorage,
     private val limits: FindFilesLimits,
     private val types: FileTypes,
+    private val groups: DuplicateGroups = DuplicateGroups(Int.MAX_VALUE),
     private val clock: EpochClock,
 ) : Tool {
     override val definition = DEFINITION
+    private val skipped = ProtectedFolders(limits.protectedFolders)
 
     override suspend fun execute(arguments: JsonObject, context: ToolExecutionContext): ToolOutput {
         val root = storage.root() ?: return ToolJson.missing(AndroidCapabilities.STORAGE)
@@ -171,9 +210,10 @@ class FindFilesTool(
             val cutoff = olderDays?.let { clock.nowMillis() - TimeUnit.DAYS.toMillis(it) }
             // A listing shows only the largest maxResults; copies are looked for among the largest maxMatches.
             val keep = if (duplicates) limits.maxMatches else limits.maxResults
-            val found = findFiles(folder, FileFilter(minBytes, cutoff, wanted), types, deadline, clock::nowMillis, keep)
+            val found = findFiles(folder, FileFilter(minBytes, cutoff, wanted), types, deadline, clock::nowMillis, keep) { skipped.contains(root, it) }
+            val job = coroutineContext.job
             buildJsonObject {
-                if (duplicates) putDuplicates(root, found, deadline) else putFiles(root, found)
+                if (duplicates) putDuplicates(root, found, deadline, { job.ensureActive() }) else putFiles(root, found)
             }
         }
         return ToolJson.success(PROVENANCE, body)
@@ -194,10 +234,13 @@ class FindFilesTool(
         if (found.partial) put(PARTIAL, true)
     }
 
-    private fun kotlinx.serialization.json.JsonObjectBuilder.putDuplicates(root: File, found: FindResult, deadline: Long) {
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putDuplicates(root: File, found: FindResult, deadline: Long, ensureActive: () -> Unit) {
         // The sizes the walk read: nothing is looked at again once it may have used up the time.
         val sizes = found.files.associate { it.file to it.bytes }
-        val result = findDuplicates(found.files.map { it.file to it.bytes }, deadline, clock::nowMillis, limits.maxHashBytes)
+        val result = findDuplicates(found.files.map { it.file to it.bytes }, deadline, clock::nowMillis, limits.maxHashBytes, ensureActive)
+        // delete_files checks these so a copy listed here is never the last one to go, even across calls.
+        val seen = found.files.associateBy { it.file }
+        groups.remember(result.groups.map { group -> group.map { Copy(it, seen.getValue(it).bytes, seen.getValue(it).modified) } })
         val groups = result.groups
             .map { group -> group to sizes.getValue(group.first()) * (group.size - 1) }
             .sortedByDescending { it.second }

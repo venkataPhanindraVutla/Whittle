@@ -29,6 +29,8 @@
     "maxHashBytes": 2147483648,
     "maxMatches": 20000,
     "maxDeletePerCall": 50,
+    "previewMillis": 2000,
+    "previewHashBytes": 268435456,
     "protectedFolders": ["Android/data", "Android/obb", "Android/media"],
     "types": {
       "image": ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "raw", "dng"],

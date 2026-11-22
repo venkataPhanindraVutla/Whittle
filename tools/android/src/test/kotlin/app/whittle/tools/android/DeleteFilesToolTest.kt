@@ -31,6 +31,7 @@ class DeleteFilesToolTest {
         override fun root() = root
     }
     private val scanned = mutableListOf<String>()
+    private val groups = DuplicateGroups(1_000)
     private val ctx = ToolExecutionContext(RunId("r"), ToolCallId("c"))
 
     private companion object {
@@ -60,6 +61,8 @@ class DeleteFilesToolTest {
             lastCopy = "is kept: the other files listed with it are identical",
             maybeLastCopy = "is kept: it couldn't be told apart from others in time",
             keptCopyGone = "the identical copy the card kept is gone now",
+            noOtherCopy = "no other copy is left",
+            keeps = "keeps",
             notOnCard = "wasn't on the list the user approved",
             changed = "changed since the user saw it on the card",
             refusedByAndroid = "Android didn't let it be deleted",
@@ -71,7 +74,7 @@ class DeleteFilesToolTest {
         File(dir, path).also { it.parentFile.mkdirs() }.apply { writeBytes(content) }
 
     private fun tool(maxPaths: Int = 10, maxHashBytes: Long = Long.MAX_VALUE) =
-        DeleteFilesTool(storage, DeleteFilesLimits(maxPaths, PROTECTED, scanMillis = 60_000, maxHashBytes), WORDS, EpochClock { 0L }) { scanned += it }
+        DeleteFilesTool(storage, DeleteFilesLimits(maxPaths, PROTECTED, previewMillis = 60_000, maxHashBytes), WORDS, EpochClock { 0L }, groups) { scanned += it }
 
     private fun args(vararg paths: String) = JsonObject(mapOf("paths" to JsonArray(paths.map { JsonPrimitive(it) })))
 
@@ -367,6 +370,68 @@ class DeleteFilesToolTest {
 
         assertEquals("deleted", results("b.jpg").status("b.jpg"))
         assertTrue(twin.exists())
+    }
+
+    private fun listed(vararg files: File) = groups.remember(listOf(files.map { Copy(it, it.length(), it.lastModified()) }))
+
+    @Test
+    fun theLastListedCopyStaysEvenWhenCopiesAreDeletedInSeparateCalls() {
+        val photo = ByteArray(1_000) { 7 }
+        val a = file(root, "DCIM/a.jpg", content = photo)
+        val b = file(root, "Download/a.jpg", content = photo)
+        listed(a, b)
+
+        val card = preview("Download/a.jpg")
+        assertTrue(card.getValue(DeleteFilesTool.LISTING).contains("keeps /sdcard/DCIM/a.jpg"))
+        assertEquals("deleted", results("Download/a.jpg").status("Download/a.jpg"))
+
+        // The second call names the other copy; nothing of the group is left, so it must stay.
+        val second = results("DCIM/a.jpg")
+        assertEquals("refused", second.status("DCIM/a.jpg"))
+        assertTrue("no other copy" in preview("DCIM/a.jpg").getValue(DeleteFilesTool.LISTING))
+        assertTrue(a.exists())
+        assertFalse(b.exists())
+    }
+
+    @Test
+    fun aCopyDeletedInTheSameCallIsNeverTheSurvivor() {
+        val photo = ByteArray(1_000) { 8 }
+        val a = file(root, "a.jpg", content = photo)
+        val b = file(root, "b.jpg", content = photo)
+        val c = file(root, "c.jpg", content = photo)
+        listed(a, b, c)
+
+        // b and c are in one call, so the first listed stays as well; a stays because the group has nothing else.
+        assertEquals(listOf("refused", "deleted"), results("b.jpg", "c.jpg").values.map { it.getValue("status").jsonPrimitive.content })
+        assertTrue(a.exists() && b.exists())
+        assertFalse(c.exists())
+    }
+
+    @Test
+    fun aGroupCopyWhoseSurvivorChangedIsNotCountedAsASurvivor() {
+        val photo = ByteArray(1_000) { 9 }
+        val a = file(root, "a.jpg", content = photo)
+        val b = file(root, "b.jpg", content = photo)
+        listed(a, b)
+        a.setLastModified(a.lastModified() + 60_000)
+
+        assertEquals("refused", results("b.jpg").status("b.jpg"))
+        assertTrue(b.exists())
+    }
+
+    @Test
+    fun theKeptCopyIsRecheckedByModifiedTimeToo() {
+        val photo = ByteArray(1_000) { 4 }
+        val kept = file(root, "a.jpg", content = photo)
+        val copy = file(root, "b.jpg", content = photo)
+        val approved = runBlocking { tool().preview(args("a.jpg", "b.jpg")) }.approved
+        // Same size, but rewritten (a new modified time) while the card waited.
+        kept.setLastModified(kept.lastModified() + 60_000)
+
+        val out = runBlocking { tool().execute(args("a.jpg", "b.jpg"), ctx.copy(approved = approved)) }
+
+        assertEquals(listOf("refused", "refused"), Json.parseToJsonElement(out.content).jsonObject.getValue("files").jsonArray.map { it.jsonObject.getValue("status").jsonPrimitive.content })
+        assertTrue(copy.exists())
     }
 
     @Test

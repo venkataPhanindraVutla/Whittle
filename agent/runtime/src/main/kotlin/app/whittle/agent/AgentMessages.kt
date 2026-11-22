@@ -142,6 +142,8 @@ data class AgentMessages(
     val deleteLastCopy: String,
     val deleteMaybeLastCopy: String,
     val deleteKeptCopyGone: String,
+    val deleteNoOtherCopy: String,
+    val deleteKeeps: String,
     val deleteNotOnCard: String,
     val deleteChanged: String,
     val deleteRefusedByAndroid: String,
@@ -243,6 +245,8 @@ data class AgentMessages(
         requirePlaceholders(deleteLastCopy)
         requirePlaceholders(deleteMaybeLastCopy)
         requirePlaceholders(deleteKeptCopyGone)
+        requirePlaceholders(deleteNoOtherCopy)
+        requirePlaceholders(deleteKeeps)
         requirePlaceholders(deleteNotOnCard)
         requirePlaceholders(deleteChanged)
         requirePlaceholders(deleteRefusedByAndroid)

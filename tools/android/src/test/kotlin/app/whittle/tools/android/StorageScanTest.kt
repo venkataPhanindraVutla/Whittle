@@ -8,7 +8,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class StorageScanTest {
-    private val root: File = Files.createTempDirectory("storage-scan").toFile().also { it.deleteOnExit() }
+    private val root: File = Files.createTempDirectory("storage-scan").toFile().canonicalFile.also { it.deleteOnExit() }
 
     private fun file(path: String, bytes: Int) {
         val f = File(root, path)
@@ -62,5 +62,19 @@ class StorageScanTest {
         var clock = 0L
         val cut = bytesOlderThan(root, 5_000, deadlineMillis = 1, now = { clock++ })
         assertTrue(cut.partial)
+    }
+
+    @Test
+    fun skippedFoldersAreNeitherCountedNorListed() {
+        file("Android/data/app/a.bin", 500)
+        file("android/Media/b.bin", 400)
+        file("Android/notes.bin", 30)
+        file("DCIM/c.bin", 20)
+        val protected = ProtectedFolders(listOf("Android/data", "Android/media"))
+
+        val result = topFolders(root, limit = 10, deadlineMillis = 1_000, now = { 0L }) { protected.contains(root, it) }
+
+        assertEquals(listOf("Android" to 30L, "DCIM" to 20L), result.folders.map { it.name to it.bytes })
+        assertEquals(30L, topFolders(root, 10, 1_000, { 0L }) { protected.contains(root, it) }.folders.first().bytes)
     }
 }

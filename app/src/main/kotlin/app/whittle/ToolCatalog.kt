@@ -19,6 +19,7 @@ import app.whittle.tools.android.HealthDataTool
 import app.whittle.tools.android.ComposeMessageTool
 import app.whittle.tools.android.ContactsSearchTool
 import app.whittle.tools.android.DeleteFilesTool
+import app.whittle.tools.android.DuplicateGroups
 import app.whittle.tools.android.DeleteFilesWords
 import app.whittle.tools.android.DeviceMediaScan
 import app.whittle.tools.android.DeviceSharedStorage
@@ -93,6 +94,8 @@ object ToolCatalog {
         phone: PhoneTools,
         createApp: CreateAppTool,
         buildApp: BuildAppTool,
+        // What find_files lists as copies, which delete_files checks so the last copy of a group stays.
+        duplicateGroups: DuplicateGroups = DuplicateGroups(phone.config.storage.maxMatches),
     ): Set<Tool> = switched(
         setOf(
             AskUserTool(),
@@ -101,8 +104,8 @@ object ToolCatalog {
             WebFetchTool(httpClient),
             ContactsSearchTool(context),
             StorageOverviewTool(context, DeviceSharedStorage(context), phone.config.storage.limits, clock),
-            FindFilesTool(DeviceSharedStorage(context), phone.config.storage.findLimits, phone.config.storage.fileTypes, clock),
-            DeleteFilesTool(DeviceSharedStorage(context), phone.config.storage.deleteLimits, deleteFilesWords(messages, phone.config.storage.maxDeletePerCall), clock, DeviceMediaScan(context)),
+            FindFilesTool(DeviceSharedStorage(context), phone.config.storage.findLimits, phone.config.storage.fileTypes, duplicateGroups, clock),
+            DeleteFilesTool(DeviceSharedStorage(context), phone.config.storage.deleteLimits, deleteFilesWords(messages, phone.config.storage.maxDeletePerCall), clock, duplicateGroups, DeviceMediaScan(context)),
             CalendarEventsTool(context, clock),
             HealthDataTool(phone.health, clock, phone.config.health.limits),
             ComposeMessageTool(context),
@@ -156,6 +159,8 @@ private fun deleteFilesWords(messages: AgentMessages, maxPaths: Int) = DeleteFil
     lastCopy = messages.deleteLastCopy,
     maybeLastCopy = messages.deleteMaybeLastCopy,
     keptCopyGone = messages.deleteKeptCopyGone,
+    noOtherCopy = messages.deleteNoOtherCopy,
+    keeps = messages.deleteKeeps,
     notOnCard = messages.deleteNotOnCard,
     changed = messages.deleteChanged,
     refusedByAndroid = messages.deleteRefusedByAndroid,

@@ -15,14 +15,14 @@ data class FolderSizes(val folders: List<FolderSize>, val partial: Boolean)
 /**
  * The sizes of [root]'s children, largest first, at most [limit]. Summing stops when [now] reaches [deadlineMillis]
  * (a clock reading, not a duration), and whatever was cut short is marked partial. Symlinks are not followed and
- * unreadable folders count as empty, so one odd folder can't fail or loop the scan.
+ * unreadable folders count as empty, so one odd folder can't fail or loop the scan. Entries [skip] says yes to are left out.
  */
-fun topFolders(root: File, limit: Int, deadlineMillis: Long, now: () -> Long): FolderSizes {
-    val children = root.listFiles().orEmpty().map { child ->
+fun topFolders(root: File, limit: Int, deadlineMillis: Long, now: () -> Long, skip: (File) -> Boolean = { false }): FolderSizes {
+    val children = root.listFiles().orEmpty().filterNot(skip).map { child ->
         if (Files.isSymbolicLink(child.toPath())) FolderSize(child.name, 0, false, false)
         else {
             val sum = Sum()
-            sum.add(child, deadlineMillis, now)
+            sum.add(child, deadlineMillis, now, skip)
             FolderSize(child.name, sum.bytes, child.isDirectory, sum.partial)
         }
     }
@@ -33,7 +33,7 @@ private class Sum {
     var bytes = 0L
     var partial = false
 
-    fun add(file: File, deadlineMillis: Long, now: () -> Long) {
+    fun add(file: File, deadlineMillis: Long, now: () -> Long, skip: (File) -> Boolean) {
         if (partial) return
         if (now() >= deadlineMillis) {
             partial = true
@@ -44,7 +44,7 @@ private class Sum {
             bytes += file.length()
             return
         }
-        file.listFiles()?.forEach { add(it, deadlineMillis, now) }
+        file.listFiles()?.filterNot(skip)?.forEach { add(it, deadlineMillis, now, skip) }
     }
 }
 

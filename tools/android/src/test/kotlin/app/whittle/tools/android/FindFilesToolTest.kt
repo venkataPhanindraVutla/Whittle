@@ -38,7 +38,7 @@ class FindFilesToolTest {
     private fun duplicatesArgs() = buildJsonObject { put("duplicates", true) }
 
     private fun call(limits: FindFilesLimits, args: JsonObject = JsonObject(emptyMap()), clock: EpochClock = EpochClock { 0L }): JsonObject {
-        val out = runBlocking { FindFilesTool(storage, limits, types, clock).execute(args, ctx) }
+        val out = runBlocking { FindFilesTool(storage, limits, clock = clock, types = types).execute(args, ctx) }
         assertTrue(!out.isError, out.content)
         return Json.parseToJsonElement(out.content).jsonObject
     }
@@ -153,5 +153,44 @@ class FindFilesToolTest {
         assertTrue("[image, other]" in out.content, out.content)
         // The schema names no kinds itself: config is the only list.
         assertNull(FindFilesTool.DEFINITION.inputSchema["properties"]!!.jsonObject["types"]!!.jsonObject["items"]!!.jsonObject["enum"])
+    }
+
+    private val protectedFolders = listOf("Android/data", "Android/media")
+
+    @Test
+    fun searchesSkipFoldersWhereOtherAppsKeepTheirFilesWithoutRegardToCase() {
+        file("Download/a.bin", ByteArray(10))
+        file("Android/media/com.whatsapp/b.bin", ByteArray(20))
+        file("android/DATA/c/c.bin", ByteArray(30))
+        file("Android/other.bin", ByteArray(40))
+
+        val body = call(FindFilesLimits(10, 1_000, 1_000_000, 100, protectedFolders))
+
+        assertEquals(listOf("/sdcard/Android/other.bin", "/sdcard/Download/a.bin"), body["files"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content })
+        assertEquals(2, body["matched"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun duplicatesInOtherAppsFoldersAreNeverProposedAndAFolderSearchedDirectlyIsEmpty() {
+        val same = ByteArray(1_000) { 2 }
+        file("Android/media/com.whatsapp/a.jpg", same)
+        file("Android/media/com.whatsapp/b.jpg", same)
+        file("Download/c.jpg", same)
+        val limits = FindFilesLimits(10, 1_000, 1_000_000, 100, protectedFolders)
+
+        assertEquals(0, call(limits, duplicatesArgs())["matched"]!!.jsonPrimitive.int)
+        val direct = call(limits, buildJsonObject { put("folder", "/sdcard/Android/media") })
+        assertEquals(0, direct["matched"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun theGroupsListedAreRememberedForDelete() {
+        val same = ByteArray(1_000) { 3 }
+        file("a.jpg", same)
+        file("b.jpg", same)
+        val groups = DuplicateGroups(100)
+        runBlocking { FindFilesTool(storage, FindFilesLimits(10, 1_000, 1_000_000, 100), types, groups) { 0L }.execute(duplicatesArgs(), ctx) }
+
+        assertEquals(2, groups.of(File(root, "a.jpg"))!!.size)
     }
 }

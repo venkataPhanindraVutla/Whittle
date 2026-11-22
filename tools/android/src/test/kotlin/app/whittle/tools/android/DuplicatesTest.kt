@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -103,5 +104,22 @@ class DuplicatesTest {
         val untold = possibleCopies(sized, Long.MAX_VALUE, { 0L }, maxHashBytes = 10)
         assertTrue(untold.identical.isEmpty())
         assertEquals(listOf(listOf(a, b, c)), untold.untold)
+    }
+
+    @Test
+    fun hashingStopsAsSoonAsItIsCancelled() {
+        val a = file("a.bin", bytes(3_000_000))
+        val b = file("b.bin", bytes(3_000_000))
+        var chunks = 0
+        val cancel = { if (++chunks > 2) throw kotlinx.coroutines.CancellationException("cancelled") }
+
+        assertFailsWith<kotlinx.coroutines.CancellationException> {
+            possibleCopies(listOf(a to a.length(), b to b.length()), Long.MAX_VALUE, { 0L }, Long.MAX_VALUE, cancel)
+        }
+        assertEquals(3, chunks)
+        chunks = 0
+        assertFailsWith<kotlinx.coroutines.CancellationException> {
+            findDuplicates(listOf(a to a.length(), b to b.length()), Long.MAX_VALUE, { 0L }, Long.MAX_VALUE, cancel)
+        }
     }
 }

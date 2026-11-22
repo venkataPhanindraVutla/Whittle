@@ -93,7 +93,9 @@ data class PhoneActionsConfig(
      * [oldDays] is "old", at most [maxHashBytes] are read looking for copies among the [maxMatches] largest matching files,
      * and [types] maps each kind of file to its extensions.
      * One delete takes at most [maxDeletePerCall] files, so its card stays short enough to read, and never one under
-     * [protectedFolders] (relative to shared storage), where other apps keep their own files.
+     * [protectedFolders] (relative to shared storage), where other apps keep their own files; searches skip those folders
+     * too. The delete card waits on checking for identical files, so that check gets its own, smaller budget: at most
+     * [previewMillis] and [previewHashBytes] read.
      */
     @Serializable
     data class Storage(
@@ -104,12 +106,14 @@ data class PhoneActionsConfig(
         val maxHashBytes: Long,
         val maxMatches: Int,
         val maxDeletePerCall: Int,
+        val previewMillis: Long,
+        val previewHashBytes: Long,
         val protectedFolders: List<String>,
         val types: Map<String, List<String>>,
     ) {
-        val limits: StorageLimits get() = StorageLimits(maxFolders, scanMillis, oldDays)
-        val deleteLimits: DeleteFilesLimits get() = DeleteFilesLimits(maxDeletePerCall, protectedFolders, scanMillis, maxHashBytes)
-        val findLimits: FindFilesLimits get() = FindFilesLimits(maxResults, scanMillis, maxHashBytes, maxMatches)
+        val limits: StorageLimits get() = StorageLimits(maxFolders, scanMillis, oldDays, protectedFolders)
+        val deleteLimits: DeleteFilesLimits get() = DeleteFilesLimits(maxDeletePerCall, protectedFolders, previewMillis, previewHashBytes)
+        val findLimits: FindFilesLimits get() = FindFilesLimits(maxResults, scanMillis, maxHashBytes, maxMatches, protectedFolders)
         val fileTypes: FileTypes get() = FileTypes(types)
     }
 
@@ -120,6 +124,9 @@ data class PhoneActionsConfig(
         require(offMessage.contains("{{feature}}")) { "offMessage must take {{feature}}" }
         require(reminders.maxReminders > 0 && reminders.maxTextChars > 0 && share.maxFileBytes > 0) { "phone-actions.json limits must be positive" }
         require(storage.maxFolders > 0 && storage.scanMillis > 0 && storage.maxResults > 0 && storage.oldDays > 0 && storage.maxHashBytes > 0 && storage.maxMatches >= storage.maxResults && storage.maxDeletePerCall > 0) { "phone-actions.json storage limits must be positive, and maxMatches at least maxResults" }
+        require(storage.previewMillis in 1..storage.scanMillis && storage.previewHashBytes in 1..storage.maxHashBytes) {
+            "phone-actions.json storage.previewMillis and previewHashBytes must be positive and at most scanMillis and maxHashBytes"
+        }
         require(storage.maxDeletePerCall <= MAX_DELETE_PER_CALL) { "phone-actions.json storage.maxDeletePerCall must be at most $MAX_DELETE_PER_CALL" }
         require(storage.protectedFolders.all { folder -> folder.trim('/').isNotEmpty() && folder.split('/').none { it == ".." } }) {
             "phone-actions.json storage.protectedFolders must name folders under shared storage, with no .."
