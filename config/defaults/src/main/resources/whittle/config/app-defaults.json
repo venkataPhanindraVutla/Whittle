@@ -98,7 +98,12 @@
     "review": {
       "fileName": "memory-suggestions.bin",
       "suggest": false,
-      "models": { "anthropic": "claude-haiku-4-5", "openai": "gpt-5-mini" },
+      "models": {
+        "anthropic": { "id": "claude-haiku-4-5" },
+        "openai": { "id": "gpt-5-mini", "effort": "LOW" },
+        "gemini": { "id": "gemini-2.5-flash-lite" },
+        "openrouter": { "id": "google/gemini-2.5-flash-lite" }
+      },
       "quietMillis": 60000,
       "maxSuggestions": 3,
       "maxInputChars": 6000,

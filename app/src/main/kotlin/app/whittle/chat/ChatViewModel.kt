@@ -25,6 +25,7 @@ import app.whittle.core.common.Outcome
 import app.whittle.core.common.getOrNull
 import app.whittle.core.model.ContentBlock
 import app.whittle.core.model.Message
+import app.whittle.core.model.ProviderId
 import app.whittle.core.model.Role
 import app.whittle.design.components.AgentState
 import app.whittle.design.tokens.WhittleHaptic
@@ -245,7 +246,7 @@ class ChatViewModel(
     val working: Boolean get() = current.value.working || background.value.isNotEmpty()
 
     /** Reviews a chat for memories once the user has left it alone for a while. */
-    private val quiet = QuietReviews(viewModelScope, graph.memoryQuietMillis) { id -> reviewQuiet(ChatId(id)) }
+    private val quiet = QuietReviews(viewModelScope, graph.memoryQuietMillis, enabled = { graph.memoryReview.enabled }) { id -> reviewQuiet(ChatId(id)) }
 
     /** A project picked in a new chat, before it has an id to keep it under. */
     private var pendingProject: String? = null
@@ -376,7 +377,10 @@ class ChatViewModel(
         screenshot?.let { graph.appScope.launch { graph.attachments.discard(it) } }
     }
 
-    /** The composer holds text shared from another app, which isn't the user's own words; it goes with the first message sent. */
+    /**
+     * The composer holds words the user didn't type, which the memory review leaves out: text shared from another app, or
+     * text the app wrote ([sendText], [askToFix]), which can carry a name the model chose. It goes with the next message sent.
+     */
     private var composerShared = false
 
     /** Attached photos, for thumbnails and the viewer. */
@@ -606,17 +610,19 @@ class ChatViewModel(
 
     /**
      * The memory review of a chat that went quiet: from the session if it's still open, else from what was saved; a chat
-     * that's gone is not brought back. The model is the one chosen now.
+     * that's gone is not brought back. The review goes to the provider the chat's own tasks ran on, not the one chosen
+     * now. Nothing is loaded when the user has turned the review off since the wait began.
      */
     private suspend fun reviewQuiet(id: ChatId) {
+        if (!graph.memoryReview.enabled) return
         val live = if (current.value.chatId == id) current.value else background.value[id]
-        val (items, automationName) = if (live != null) {
-            live.state.value.items to live.automationName
+        val (items, automationName, provider) = if (live != null) {
+            Triple(live.state.value.items, live.automationName, live.providerId)
         } else {
             val document = graph.chats.load(id).getOrNull()?.let { decode(it.document) } ?: return
-            document.items to document.automationName
+            Triple(document.items, document.automationName, document.providerId)
         }
-        reviewChat(id.value, items, _state.value.model, automationName, graph.memoryReview::review)
+        reviewChat(id.value, items, provider?.let(::ProviderId), automationName, graph.memoryReview::review)
     }
 
     /**
@@ -823,9 +829,10 @@ class ChatViewModel(
     /** Things to build that a new chat offers. */
     val appIdeas: List<AppIdea> get() = graph.appIdeas
 
-    /** Sends [text] as the user's message, as if typed. */
+    /** Sends [text], which the app wrote (a starter, Undo on a file), as the user's message. */
     fun sendText(text: String) {
         _state.update { it.copy(input = text) }
+        composerShared = true
         send()
     }
 
@@ -840,6 +847,7 @@ class ChatViewModel(
         if (!canAskToFix(state.attaching, state.model != null)) return
         val pasted = pastedOutput(graph.agentMessages, kind, fixName(name), output, graph.maxPastedOutputChars)
         _state.update { it.copy(input = request) }
+        composerShared = true
         send(listOf(pasted))
     }
 

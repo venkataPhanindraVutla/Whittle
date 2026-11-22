@@ -49,7 +49,10 @@ sealed interface ThreadItem {
         val steer: Boolean,
         /** Photos and files sent with it, saved in the workspace. */
         val attachments: List<Attachment> = emptyList(),
-        /** Words the user didn't type: text shared in from another app. The memory review leaves them out. */
+        /**
+         * Words the user didn't type: text shared in from another app, or written by the app for them (Undo, Ask to fix,
+         * a starter), which can carry names the model chose. The memory review leaves them out.
+         */
         val shared: Boolean = false,
         /** An option the user picked on a question card. The model wrote it, so the memory review leaves it out. */
         val fromCard: Boolean = false,

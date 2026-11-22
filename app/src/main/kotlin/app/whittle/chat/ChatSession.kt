@@ -139,6 +139,10 @@ class ChatSession(
     /** Set in a chat an automation started: the chat is titled after it, not after its first message. */
     var automationName: String? = null
 
+    /** The provider the chat's last task ran on, for its memory review: the chat's own, not whatever is selected later. */
+    var providerId: String? = null
+        private set
+
     /** The task running now is Claude Code's, not Whittle's own loop. */
     private var claudeCodeRun = false
 
@@ -166,6 +170,7 @@ class ChatSession(
     suspend fun load(id: ChatId, document: ChatDocument) {
         chatId = id
         automationName = document.automationName
+        providerId = document.providerId
         history = document.history
         runIds = document.runIds
         nextKey = document.nextKey
@@ -215,6 +220,7 @@ class ChatSession(
         val runId = RunId(graph.idGenerator.newId())
         val chat = ensureId()
         runIds = runIds + runId
+        providerId = model.providerId.value
         append(ThreadItem.User(key(), text, steer = false, attachments = attachments, shared = shared))
         val request = RunRequest(
             runId = runId,
@@ -824,6 +830,7 @@ class ChatSession(
             nextKey = nextKey,
             runIds = runIds,
             automationName = automationName,
+            providerId = providerId,
         )
         graph.appScope.launch {
             saveLock.withLock { graph.chats.save(id, title, document.encode()) }

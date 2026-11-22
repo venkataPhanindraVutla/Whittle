@@ -3,6 +3,7 @@ package app.whittle.settings
 import app.whittle.design.theme.ThemeMode
 import app.whittle.core.config.ConfigName
 import app.whittle.core.config.VersionedConfig
+import app.whittle.llm.api.ReasoningEffort
 import app.whittle.tools.api.RiskTier
 import app.whittle.tools.api.ToolDefinition
 import app.whittle.updates.ApkAsset
@@ -219,8 +220,8 @@ data class MemoryDefaults(
  * review (at most [maxInputChars], newest kept) after up to [contextChars] of what they said before it, for context,
  * and proposes up to [maxSuggestions] facts (answering in at most [maxOutputTokens]); they wait in [fileName]
  * (encrypted) for the user. It runs only once the user turns it on, unless [suggest] says it starts on. The call goes to
- * the cheaper model [models] names for the chosen model's provider (provider id to model id), or to the chosen model
- * when there's none. What's remembered about past reviews is capped so it can't grow forever: the last [maxDismissed] texts
+ * the cheaper model [models] names for the chat's own provider (provider id to [ReviewModel]); a provider with no entry
+ * gets no review at all, never the chat's own, dearer model. What's remembered about past reviews is capped so it can't grow forever: the last [maxDismissed] texts
  * the user dismissed and the last [maxReviewedChats] chats reviewed. The newest [maxDeclinedInInput] dismissed texts
  * go back to the model with each review so it doesn't propose them again in other words.
  */
@@ -228,7 +229,7 @@ data class MemoryDefaults(
 data class MemoryReviewDefaults(
     val fileName: String,
     val suggest: Boolean,
-    val models: Map<String, String>,
+    val models: Map<String, ReviewModel>,
     val quietMillis: Long,
     val maxSuggestions: Int,
     val maxInputChars: Int,
@@ -240,13 +241,20 @@ data class MemoryReviewDefaults(
 ) {
     init {
         require(fileName.isNotBlank()) { "memory.review.fileName must be set" }
-        require(models.all { (provider, model) -> provider.isNotBlank() && model.isNotBlank() }) { "memory.review.models names a provider and a model each" }
+        require(models.all { (provider, model) -> provider.isNotBlank() && model.id.isNotBlank() }) { "memory.review.models names a provider and a model each" }
         require(contextChars >= 0) { "memory.review.contextChars can't be negative" }
         require(quietMillis > 0 && maxSuggestions > 0 && maxInputChars > 0 && maxOutputTokens > 0 && maxDismissed > 0 && maxDeclinedInInput > 0 && maxReviewedChats > 0) {
             "memory.review limits must be positive"
         }
     }
 }
+
+/**
+ * The model a review calls on one provider. [effort] is the reasoning effort to send; none sends no setting, for a model
+ * that has no reasoning to set. A model that reasons by default needs a low effort, or its thinking eats the reply's budget.
+ */
+@Serializable
+data class ReviewModel(val id: String, val effort: ReasoningEffort? = null)
 
 /** A kind of thing worth remembering: what it's about, an example, and the words the editor starts with. */
 @Serializable

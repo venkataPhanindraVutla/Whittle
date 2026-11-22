@@ -20,6 +20,8 @@ data class ChatDocument(
     val runIds: List<RunId> = emptyList(),
     /** The automation that started this chat, which it's titled after. */
     val automationName: String? = null,
+    /** The provider the chat's last task ran on, where its memory review goes. Null in chats saved before it was kept. */
+    val providerId: String? = null,
 ) {
     fun encode(): String = JSON.encodeToString(serializer(), this)
 

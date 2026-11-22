@@ -5,6 +5,7 @@ import app.whittle.core.common.Outcome
 import app.whittle.llm.api.ModelAdapterRegistry
 import app.whittle.llm.api.ModelEvent
 import app.whittle.llm.api.ReasoningEffort
+import app.whittle.llm.api.StopReason
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,5 +38,23 @@ class OneShotTest {
         val result = oneShot(adapter).complete(testModel(), "sys", "hi", 64)
 
         assertEquals(error, assertIs<Outcome.Failure>(result).error)
+    }
+
+    @Test
+    fun `a reply cut off by the output limit is a failure`() = runTest {
+        val adapter = ScriptedAdapter(listOf(listOf(ModelEvent.TextDelta("{\"facts\":"), ModelEvent.Completed(StopReason.MAX_TOKENS))))
+
+        val result = oneShot(adapter).complete(testModel(), "sys", "hi", 64)
+
+        assertIs<Outcome.Failure>(result)
+    }
+
+    @Test
+    fun `the effort asked for is the one sent`() = runTest {
+        val adapter = ScriptedAdapter(listOf(listOf(ModelEvent.TextDelta("ok"))))
+
+        oneShot(adapter).complete(testModel(), "sys", "hi", 64, ReasoningEffort.HIGH)
+
+        assertEquals(ReasoningEffort.HIGH, adapter.requests.single().reasoningEffort)
     }
 }

@@ -126,9 +126,12 @@ class BundledAppConfigTest {
         val providers = assertIs<Outcome.Success<ProviderCatalog>>(loader.load(ConfigFiles.providerCatalog, ProviderCatalog.serializer(), ProviderCatalog.SCHEMA_VERSION)).value
         val claudeCode = assertIs<Outcome.Success<ClaudeCodeConfig>>(loader.load(ClaudeCodeConfig.FILE, ClaudeCodeConfig.serializer(), ClaudeCodeConfig.SCHEMA_VERSION)).value
         assertFalse(claudeCode.providerId in review.models, "Claude Code has no API key to call a review model with")
+        // Every API provider the app can chat with has a cheaper review model: without one its chats are never reviewed,
+        // never sent to the model the user chose, so a provider missing here is a provider with no suggestions.
+        assertEquals(providers.providers.map { it.id.value }.toSet(), review.models.keys, "memory.review.models needs an entry for each provider in the catalog, and only those")
         review.models.forEach { (provider, model) ->
             val listed = assertNotNull(providers.find(ProviderId(provider)), "memory.review.models names $provider, which isn't in the provider catalog")
-            assertTrue(listed.lists(ModelId(model)), "$model isn't a model $provider lists")
+            assertTrue(listed.lists(ModelId(model.id)), "${model.id} isn't a model $provider lists")
         }
     }
 

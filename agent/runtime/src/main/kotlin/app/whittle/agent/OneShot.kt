@@ -12,8 +12,12 @@ import app.whittle.llm.api.ModelEvent
 import app.whittle.llm.api.ModelRequest
 import app.whittle.llm.api.ProviderCatalog
 import app.whittle.llm.api.ReasoningEffort
+import app.whittle.llm.api.StopReason
 
-/** A single model call outside an agent run: no tools, low reasoning effort, text back. */
+/**
+ * A single model call outside an agent run: no tools, text back. A reply cut off by the output limit is a failure, not a
+ * short answer: what came back is half of something.
+ */
 class OneShot(
     private val adapters: ModelAdapterRegistry,
     private val providers: ProviderCatalog,
@@ -27,6 +31,7 @@ class OneShot(
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int,
+        reasoningEffort: ReasoningEffort = ReasoningEffort.LOW,
     ): Outcome<String> = connectModel(adapters, providers, credentials, model).flatMap { connection ->
         val request = ModelRequest(
             model = model,
@@ -34,17 +39,20 @@ class OneShot(
             messages = listOf(Message.userText(userText)),
             tools = emptyList(),
             maxOutputTokens = maxOutputTokens,
-            reasoningEffort = ReasoningEffort.LOW,
+            reasoningEffort = reasoningEffort,
         )
         val text = StringBuilder()
         var failure: HarnessError? = null
+        var cutOff = false
         connection.adapter.stream(request, connection.provider, connection.apiKey).collect { event ->
             when (event) {
                 is ModelEvent.TextDelta -> text.append(event.text)
                 is ModelEvent.Failed -> if (failure == null) failure = event.error
+                is ModelEvent.Completed -> cutOff = event.stopReason == StopReason.MAX_TOKENS
                 else -> Unit
             }
         }
-        failure?.let { Outcome.Failure(it) } ?: Outcome.Success(text.toString())
+        val error = failure ?: HarnessError.Provider(statusCode = 0, message = "The reply hit the output limit").takeIf { cutOff }
+        error?.let { Outcome.Failure(it) } ?: Outcome.Success(text.toString())
     }
 }
