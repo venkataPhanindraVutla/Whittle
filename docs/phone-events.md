@@ -44,7 +44,7 @@ Code is written only where the model can't or mustn't be trusted to do it:
   - **Every N minutes** (interval), so a check can run more than once a day.
 - The event's details (sender and text, app and notification text, place name, network name) reach the run as
   untrusted content, as pasted output does today, so the run is tainted.
-- The agent can set up an event automation from chat ("when my bank texts me, add the amount to expenses.csv"),
+- The agent can set up an event automation from chat ("when my bank texts me, tell me the amount and merchant"),
   with the same always-ask approval card `schedule_task` has.
 - The user can set one up in Settings › Automations, and start from recipes.
 - **Storage:** the agent can see what's using space on the phone (totals, largest folders and files, old
@@ -133,10 +133,13 @@ limited to that.
 - Matching automations start like a scheduled one, through `AutomationRunner`: unattended, with their pre-approved
   tools, retried if a task is running or the user is in the app, given up after the configured time.
 - The event's details go into the run as untrusted content, named for what it is ("a text from HDFC-BK"), and as
-  personal data, so a run that has them asks before reading the web once anything has steered it.
-- **One-time codes:** patterns in config (a 4–8 digit number, or a code of letters and digits, near words like OTP,
-  code, verification, PIN, and so on). A text or notification that looks like it holds one is dropped before
-  anything is stored or sent to a model; from a messaging app, any of those words is enough. When unsure, drop.
+  personal data when it is a text or a notification (a place, charging or Wi-Fi isn't), so a run that has them asks
+  before reading the web once anything has steered it.
+- **One-time codes:** patterns in config (a 4–8 digit number, or a code of letters and digits, near whole words like
+  OTP, code, verification, PIN, and so on). A masked account number ("XX1234", "A/c **1234") and a number a label
+  calls a reference ("ref 845123", "AWB 123456") don't count, unless a keyword stands right before the label. A text or
+  notification that looks like it holds one is dropped before anything is stored or sent to a model, and counted on the
+  automation's row as skipped; from a messaging app, any of those words is enough. When unsure, drop.
 - **Limits per automation:** a cooldown between runs and a daily cap on runs, both in config with defaults (for
   example 2 minutes and 30 a day).
 - **Events during the cooldown wait, they aren't lost** (a bank text 30 seconds after another still gets logged).
@@ -151,13 +154,15 @@ with its filters. It always asks, like today; the approval card says the event i
 HDFC-BK") and what it will do. The model never picks pre-approved tools, as today.
 
 **What an event automation may do on its own.** The same as a scheduled one, except that one started by a text or a
-notification only reads, since a stranger writes what it reads *(changed in review)*:
+notification has no web and doesn't write, since a stranger writes what it reads *(changed in review)*:
 
 - An automation the agent creates gets the default tools from `automations.json` (`default: true`), as
   `schedule_task` does now; one on a text or a notification gets `events.messageDefaultTools` instead, without the web.
-- A recipe brings its own tool list, since the user chose the recipe. No recipe on a message may write: the bank-text
-  recipe asks before appending to `expenses.csv`. Choices marked `writes` are refused for message triggers when saved,
-  and never pre-approved for their runs.
+- A recipe brings its own tool list, since the user chose the recipe. No recipe on a message may write or use the web:
+  the bank-text recipe replies with the parsed line. Choices marked `writes` are refused for message triggers when
+  saved, and never pre-approved for their runs; so are those marked `web`. A Wi-Fi trigger on any network also refuses
+  writes, since whoever runs a network names it. On Claude Code, a run that holds a text gets no read or web tools
+  pre-allowed (`askWhenUntrusted` in claude-code.json), as it can't tell the run was steered.
 - A recipe that acts on what a text says (the bank one) needs a sender (`senderRequired`), and the editor warns
   whenever From is empty. A sender matches whole: a number by its digits (one of 8 or more may leave out the country
   code), a sender ID as itself or as one dash-separated part ("HDFCBK" is "VM-HDFCBK"), never as a substring.
@@ -172,7 +177,7 @@ of the same name asks again.
 
 **Recipes** (config, in `automations.json` `ideas`, with their trigger):
 
-- Bank texts → log the amount, merchant and date to `expenses.csv` (SMS, senders the user picks).
+- Bank texts → one line with the date, amount, merchant and debit or credit (SMS, senders the user picks).
 - Delivery texts or notifications → one line on what's arriving and when.
 - Plugging in at night → a short summary of tomorrow (calendar, reminders).
 - Arriving home → reminders tied to home.
