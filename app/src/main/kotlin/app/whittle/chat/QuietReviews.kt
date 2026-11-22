@@ -1,6 +1,6 @@
 package app.whittle.chat
 
-import app.whittle.llm.api.ModelDescriptor
+import app.whittle.core.model.ProviderId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -10,12 +10,13 @@ import kotlinx.coroutines.launch
 
 /**
  * Waits for a chat to go quiet, then runs [run] for it, once. Leaving a chat starts the wait; coming back to it, writing
- * in it or deleting it ends it, so a chat the user is still in is never reviewed. A review keeps its place until it
+ * in it or deleting it ends it, and nothing waits while the review is [enabled] off, so a chat the user is still in is never reviewed. A review keeps its place until it
  * finishes, so ending it also stops one already talking to the model.
  */
 class QuietReviews(
     private val scope: CoroutineScope,
     private val quietMillis: Long,
+    private val enabled: () -> Boolean = { true },
     private val run: suspend (chatId: String) -> Unit,
 ) {
     private val pending = mutableMapOf<String, Job>()
@@ -23,6 +24,8 @@ class QuietReviews(
     /** The user left [chatId]: it is reviewed after [quietMillis], counted from now. */
     fun left(chatId: String) {
         pending.remove(chatId)?.cancel()
+        // Off: nothing is scheduled, so nothing loads or decrypts the chat.
+        if (!enabled()) return
         lateinit var job: Job
         // Started only once it's in the map, so it always finds itself there when it ends.
         job = scope.launch(start = CoroutineStart.LAZY) {
@@ -60,10 +63,10 @@ class QuietReviews(
 suspend fun reviewChat(
     chatId: String,
     items: List<ThreadItem>,
-    model: ModelDescriptor?,
+    provider: ProviderId?,
     automationName: String?,
-    review: suspend (String, List<ThreadItem>, ModelDescriptor?, Boolean) -> Unit,
-) = review(chatId, items, model, automationName != null)
+    review: suspend (String, List<ThreadItem>, ProviderId?, Boolean) -> Unit,
+) = review(chatId, items, provider, automationName != null)
 
 /**
  * Whether a chat whose task just ended starts going quiet: not while it's working, and not while the user is looking

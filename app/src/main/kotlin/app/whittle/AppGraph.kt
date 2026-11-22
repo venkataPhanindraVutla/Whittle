@@ -385,7 +385,7 @@ class AppGraph(context: Context) {
         clock,
         idGenerator,
         appScope,
-        chatExists = { id -> chats.load(ChatId(id)).getOrNull() != null },
+        chatExists = { id -> chats.exists(ChatId(id)).getOrNull() == true },
     )
 
     /** Tasks Whittle runs by itself on a schedule, each with an alarm for its next run. */

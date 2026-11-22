@@ -23,6 +23,9 @@ interface ChatStore {
     /** Returns null when there is no chat with [id]. */
     suspend fun load(id: ChatId): Outcome<StoredChat?>
 
+    /** Whether a chat with [id] is saved, without decrypting it. */
+    suspend fun exists(id: ChatId): Outcome<Boolean>
+
     /** The most recently saved chat, or null before the first one. */
     suspend fun latest(): Outcome<StoredChat?>
 

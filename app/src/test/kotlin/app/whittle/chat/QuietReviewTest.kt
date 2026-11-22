@@ -1,6 +1,6 @@
 package app.whittle.chat
 
-import app.whittle.llm.api.ModelDescriptor
+import app.whittle.core.model.ProviderId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
@@ -27,6 +27,14 @@ class QuietReviewTest {
         advanceTimeBy(1)
         runCurrent()
         assertEquals(listOf("a"), ran)
+    }
+
+    @Test
+    fun `nothing waits while the review is off`() = runTest {
+        QuietReviews(backgroundScope, quietMillis = 1_000, enabled = { false }) { ran += it }.left("a")
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertTrue(ran.isEmpty())
     }
 
     @Test
@@ -136,9 +144,9 @@ class QuietReviewTest {
     @Test
     fun `an automation's chat is never handed to the review as a user's`() = runTest {
         val calls = mutableListOf<Boolean>()
-        val review: suspend (String, List<ThreadItem>, ModelDescriptor?, Boolean) -> Unit = { _, _, _, automation -> calls += automation }
-        reviewChat("a", emptyList(), model = null, automationName = "Morning news", review = review)
-        reviewChat("b", emptyList(), model = null, automationName = null, review = review)
+        val review: suspend (String, List<ThreadItem>, ProviderId?, Boolean) -> Unit = { _, _, _, automation -> calls += automation }
+        reviewChat("a", emptyList(), provider = null, automationName = "Morning news", review = review)
+        reviewChat("b", emptyList(), provider = null, automationName = null, review = review)
         assertEquals(listOf(true, false), calls)
     }
 

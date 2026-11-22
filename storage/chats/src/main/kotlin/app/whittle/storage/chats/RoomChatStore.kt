@@ -33,6 +33,8 @@ class RoomChatStore(
     override suspend fun load(id: ChatId): Outcome<StoredChat?> =
         storageCall { dao.find(id.value) }.flatMap { entity -> entity?.let(::decode) ?: Outcome.Success(null) }
 
+    override suspend fun exists(id: ChatId): Outcome<Boolean> = storageCall { dao.count(id.value) > 0 }
+
     override suspend fun latest(): Outcome<StoredChat?> =
         storageCall { dao.latest() }.flatMap { entity -> entity?.let(::decode) ?: Outcome.Success(null) }
 

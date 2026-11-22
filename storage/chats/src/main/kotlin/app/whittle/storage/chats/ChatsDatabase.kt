@@ -39,6 +39,9 @@ interface ChatDao {
     @Query("SELECT * FROM chats WHERE chatId = :chatId")
     suspend fun find(chatId: String): ChatEntity?
 
+    @Query("SELECT COUNT(*) FROM chats WHERE chatId = :chatId")
+    suspend fun count(chatId: String): Int
+
     @Query("SELECT * FROM chats ORDER BY updatedAtMillis DESC LIMIT 1")
     suspend fun latest(): ChatEntity?
 
