@@ -174,3 +174,5 @@
 }
       "maskedAccountPattern": "(?:(?<![\\p{L}\\p{N}])x+|\\*+|•+)\\s?\\d{3,6}",
       "referenceLabelPattern": "(?<![\\p{L}\\p{N}])(?:ref(?:erence)?|awb|order|txn|trn|utr|rrn|id|a/c|acc(?:oun)?t|card|ending|invoice|tracking)\\.?(?:\\s*(?:no\\.?|number|id|#))?\\s*[:#.-]?\\s*$",
+      "maskedAccountPattern": "(?:(?<![\\p{L}\\p{N}])x+|\\*+|•+)\\s?\\d{3,6}",
+      "referenceLabelPattern": "(?<![\\p{L}\\p{N}])(?:ref(?:erence)?|awb|order|txn|trn|utr|rrn|id|a/c|acc(?:oun)?t|card|ending|invoice|tracking)\\.?(?:\\s*(?:no\\.?|number|id|#))?\\s*[:#.-]?\\s*$",

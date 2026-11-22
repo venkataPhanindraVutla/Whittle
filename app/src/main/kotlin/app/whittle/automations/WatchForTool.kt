@@ -28,7 +28,7 @@ fun interface LaunchableApps {
  * Sets up an automation that starts on something that happens on the phone instead of at a time of day: a text, a
  * notification, plugging in, joining a Wi-Fi network, or every few minutes. Like [ScheduleTaskTool] it always asks and
  * takes the chat's project. It gives the new automation the default tools, except that one on a text or a notification
- * gets only [EventsConfig.messageDefaultTools]: no web, since what a stranger wrote could steer it. Places aren't
+ * gets only [EventsConfig.messageDefaultTools]: no web, since what a stranger wrote could steer it, and one on any Wi-Fi network gets no tool that writes. Places aren't
  * offered from chat: the model has no way to pick a spot on a map, so it sends the user to Settings.
  */
 class WatchForTool(
@@ -54,7 +54,7 @@ class WatchForTool(
             is AutomationToolSupport.Project.Chosen -> chosen.name
             is AutomationToolSupport.Project.Refused -> return support.reply(chosen.text, error = true)
         }
-        val tools = if (trigger.readsMessages) automations.config.messageDefaultToolIds else automations.config.defaultToolIds
+        val tools = (if (trigger.readsMessages) automations.config.messageDefaultToolIds else automations.config.defaultToolIds) - automations.config.refusedToolIds(trigger)
         val draft = automations.draft(request.name, request.prompt).copy(schedule = null, trigger = trigger, tools = tools, project = project)
         return when (val saved = automations.save(draft)) {
             is SaveResult.Saved -> support.reply(describe(saved.automation, trigger, event))

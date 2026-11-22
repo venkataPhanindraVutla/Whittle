@@ -1,6 +1,8 @@
 package app.whittle.automations.ui
 
 import app.whittle.automations.Trigger
+import app.whittle.automations.readsMessages
+import app.whittle.automations.refusesWrites
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -97,9 +99,18 @@ data class ToolChoice(
     val toolIds: List<String>,
     val capabilities: List<String> = emptyList(),
     val writes: Boolean = false,
+    val web: Boolean = false,
 ) {
     fun labelFor(project: String?): String = if (project != null) labelInProject ?: label else label
 }
+
+/** Whether [choice] is off for an automation started by [trigger]: no web for a message, no writes where [refusesWrites]. */
+fun ToolChoice.offFor(trigger: Trigger?): Boolean =
+    (web && trigger?.readsMessages == true) || (writes && trigger?.refusesWrites == true)
+
+/** The tool ids in [tools] that an automation started by [trigger] may keep, dropping the rows that are off for it. */
+fun keptTools(trigger: Trigger?, tools: Set<String>, choices: List<ToolChoice>): Set<String> =
+    tools - choices.filter { it.offFor(trigger) }.flatMap { it.toolIds }.toSet()
 
 @Serializable
 enum class AutomationIssue { NameEmpty, NameTooLong, PromptEmpty, PromptTooLong, TooMany, ToolNotAllowed, ProjectInvalid, IntervalTooShort, SenderRequired }

@@ -371,7 +371,7 @@
     <string name="automation_needs_access">Needs access</string>
     <string name="automation_allow">Tap to allow</string>
     <string name="automation_allow_on_phone">Allow on the phone</string>
-    <string name="automation_writes_off">Off for texts and notifications</string>
+    <string name="automation_writes_off">Off for this trigger</string>
     <plurals name="automation_skipped_today">
         <item quantity="one">%1$d skipped today</item>
         <item quantity="other">%1$d skipped today</item>

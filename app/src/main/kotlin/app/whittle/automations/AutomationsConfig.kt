@@ -34,18 +34,27 @@ data class AutomationsConfig(
         require(retryAfterMillis > 0 && giveUpAfterMillis >= retryAfterMillis && startTimeoutMillis > 0) { "retry times must be positive" }
         require(tools.map { it.key }.distinct().size == tools.size) { "tool choice keys must be unique" }
         val keys = tools.map { it.key }.toSet()
-        val writing = tools.filter { it.writes }.map { it.key }.toSet()
+        val blocked = tools.filter { it.writes || it.web }.map { it.key }.toSet()
         ideas.forEach { idea ->
             require(idea.name.length <= maxNameChars && idea.prompt.length <= maxPromptChars) { "idea ${idea.name} is too long" }
             require(keys.containsAll(idea.tools)) { "idea ${idea.name} names tool choices that don't exist" }
-            require(idea.trigger?.readsMessages != true || idea.tools.none { it in writing }) { "idea ${idea.name} starts on a message, so it may only read" }
+            require(toolIdsFor(idea).none { it in refusedToolIds(idea.trigger) }) { "idea ${idea.name} has tools its trigger refuses" }
         }
         require(keys.containsAll(events.messageDefaultTools)) { "events.messageDefaultTools names tool choices that don't exist" }
-        require(events.messageDefaultTools.none { it in writing }) { "events.messageDefaultTools may only read" }
+        require(events.messageDefaultTools.none { it in blocked }) { "events.messageDefaultTools may not write or use the web" }
     }
 
-    /** The tool ids of the choices that let a run change things; refused for automations that start on a message. */
+    /** The tool ids of the choices that let a run change things; refused for automations whose events someone else can write ([refusesWrites]). */
     val writingToolIds: Set<String> get() = tools.filter { it.writes }.flatMap { it.toolIds }.toSet()
+
+    /** The tool ids of the choices that read the web; refused for automations that start on a message. */
+    val webToolIds: Set<String> get() = tools.filter { it.web }.flatMap { it.toolIds }.toSet()
+
+    /** The tool ids [trigger]'s runs may not hold: no web for a message, no writes where [refusesWrites]. */
+    fun refusedToolIds(trigger: Trigger?): Set<String> = buildSet {
+        if (trigger?.readsMessages == true) addAll(webToolIds)
+        if (trigger?.refusesWrites == true) addAll(writingToolIds)
+    }
 
     /** What a new automation on a text or a notification may use without asking, when the model sets it up (watch_for). */
     val messageDefaultToolIds: Set<String> get() = tools.filter { it.key in events.messageDefaultTools }.flatMap { it.toolIds }.toSet()
@@ -201,7 +210,10 @@ data class AutomationToolChoice(
     val default: Boolean,
     /** Lets a run change things (files); never for an automation that starts on a message. A test keeps it true to the tools. */
     val writes: Boolean = false,
+    /** Lets a run read the web, which can carry what it read out in an address; never for an automation that starts on a message. A test keeps it true to the tools. */
+    val web: Boolean = false,
 ) {
+
     fun labelFor(project: String?): String = if (project != null) labelInProject ?: label else label
 
     init {

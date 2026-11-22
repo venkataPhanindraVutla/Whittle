@@ -177,6 +177,8 @@ class BundledAppConfigTest {
         ).value
         val unchoosable = config.preApprovedTools.keys - automations.choosableToolIds
         assertTrue(unchoosable.isEmpty(), "claude-code.json maps tools an automation can't pre-approve: $unchoosable")
+        // Reading and the web are asked about once a run holds a text: Claude Code can't tell that the run is steered.
+        assertEquals(setOf("web_fetch", "list_files", "read_file"), config.askWhenUntrusted)
     }
 
     @Test
@@ -276,6 +278,8 @@ class BundledAppConfigTest {
         // A choice says whether it writes, and Automations refuses those for a message trigger: the flag must be true to the tools.
         val wrong = config.tools.filter { choice -> choice.writes != choice.toolIds.any { tiers.getValue(it) !in readOnly } }.map { it.key }
         assertTrue(wrong.isEmpty(), "Set writes to whether these choices change anything: $wrong")
+        val notWeb = config.tools.filter { choice -> choice.web != choice.toolIds.any { tiers.getValue(it) == RiskTier.WEB_READ } }.map { it.key }
+        assertTrue(notWeb.isEmpty(), "Set web to whether these choices read the web: $notWeb")
         val messageIdeas = config.ideas.filter { it.trigger?.readsMessages == true }
         assertTrue(messageIdeas.isNotEmpty())
         val writing = messageIdeas.associate { it.name to config.toolIdsFor(it).filter { id -> tiers.getValue(id) !in readOnly } }.filterValues { it.isNotEmpty() }
@@ -512,5 +516,3 @@ class BundledAppConfigTest {
         assertTrue("--no-install-recommends" in config.tailscale.installCommand)
     }
 }
-        // Reading and the web are asked about once a run holds a text: Claude Code can't tell that the run is steered.
-        assertEquals(setOf("web_fetch", "list_files", "read_file"), config.askWhenUntrusted)

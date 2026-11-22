@@ -54,7 +54,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import app.whittle.automations.Trigger
 import app.whittle.automations.capabilities
-import app.whittle.automations.readsMessages
 import app.whittle.design.components.ReadingLazyColumn
 import app.whittle.design.components.ReadingScrollColumn
 import app.whittle.design.components.BottomActionButton
@@ -350,10 +349,8 @@ private fun AutomationEditor(
     val scrolled by remember { derivedStateOf { scroll.value > 0 } }
     val now = nowMillis()
     val trigger = draft.trigger()
-    // A run on a message only reads, so the rows that change things are off for it.
-    val readsMessages = trigger?.readsMessages == true
-    val writing = state.tools.filter { it.writes }.flatMap { it.toolIds }.toSet()
-    val kept = if (readsMessages) tools - writing else tools
+    // A run on a message doesn't read the web, and one whose events someone else can write doesn't change things.
+    val kept = keptTools(trigger, tools, state.tools)
     // Null while the When section isn't complete (no app chosen yet, say); Save waits for it.
     val edited = initial.copy(name = name, prompt = prompt, minuteOfDay = draft.minuteOfDay, days = draft.days, trigger = trigger, tools = kept, project = project)
         .takeIf { draft.complete }
@@ -540,7 +537,7 @@ private fun AutomationEditor(
                 description = stringResource(Res.string.automation_tools_hint),
             ) {
                 state.tools.forEachIndexed { index, choice ->
-                    val blocked = readsMessages && choice.writes
+                    val blocked = choice.offFor(trigger)
                     val checked = !blocked && tools.containsAll(choice.toolIds)
                     val ask = platform.requestCapabilities
                     SettingsToggleRow(

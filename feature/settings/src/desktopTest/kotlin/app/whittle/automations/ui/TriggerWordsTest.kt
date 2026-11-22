@@ -4,6 +4,7 @@ import app.whittle.automations.Edge
 import app.whittle.automations.Trigger
 import app.whittle.automations.capabilities
 import app.whittle.automations.readsMessages
+import app.whittle.automations.refusesWrites
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -77,5 +78,11 @@ class TriggerWordsTest {
     fun onlyTextsAndNotificationsReadWhatOthersWrote() {
         assertTrue(Trigger.Sms().readsMessages && Trigger.Notification("a", "A").readsMessages)
         assertFalse(Trigger.Charging(Edge.START).readsMessages || Trigger.Every(15).readsMessages || Trigger.Wifi(null, Edge.START).readsMessages)
+    }
+
+    @Test
+    fun aNameAnyoneCanSetRefusesWrites() {
+        assertTrue(Trigger.Sms().refusesWrites && Trigger.Wifi(null, Edge.START).refusesWrites)
+        assertFalse(Trigger.Wifi("Home", Edge.START).refusesWrites || Trigger.Charging(Edge.END).refusesWrites || Trigger.Every(15).refusesWrites)
     }
 }

@@ -55,7 +55,7 @@ class PhoneAutomationsHost(
     private val config = automations.config
     private val events = config.events
     private val gate = graph.eventGate
-    private val tools = config.tools.map { ToolChoice(it.key, it.icon, it.label, it.labelInProject, it.toolIds, it.capabilities, it.writes) }
+    private val tools = config.tools.map { ToolChoice(it.key, it.icon, it.label, it.labelInProject, it.toolIds, it.capabilities, it.writes, it.web) }
     private val limits = EventLimits(
         minIntervalMinutes = events.minIntervalMinutes,
         defaultEveryMinutes = events.defaultEveryMinutes,

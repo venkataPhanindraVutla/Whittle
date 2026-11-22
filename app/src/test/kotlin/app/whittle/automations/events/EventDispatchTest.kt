@@ -32,7 +32,7 @@ class EventDispatchTest {
             EpochClock { now }, IdGenerator { "x" }, { zone }, this,
         )
         suspend fun add(id: String, trigger: Trigger, enabled: Boolean = true) {
-            val a = automations.draft(id, "Do it").copy(id = id, schedule = null, trigger = trigger, enabled = enabled)
+            val a = automations.draft(id, "Do it").copy(id = id, schedule = null, trigger = trigger, tools = emptySet(), enabled = enabled)
             automations.save(a)
         }
         add("bank", Trigger.Sms(listOf("HDFCBK")))
@@ -54,7 +54,7 @@ class EventDispatchTest {
         val automations = Automations(
             MemoryBackend(), RecordingAlarms(), testAutomationsConfig, EpochClock { now }, IdGenerator { "x" }, { zone }, this,
         )
-        automations.save(automations.draft("chat", "Do it").copy(id = "chat", schedule = null, trigger = Trigger.Notification("com.whatsapp", "WhatsApp")))
+        automations.save(automations.draft("chat", "Do it").copy(id = "chat", schedule = null, trigger = Trigger.Notification("com.whatsapp", "WhatsApp"), tools = emptySet()))
         val gate = EventGate(MemoryEventBackend(), testEventsConfig, CodeMask(testCodeMaskConfig), EpochClock { now }, { zone }, this)
         EventDispatch(automations, gate, { true }) {}.dispatch(PhoneEvent(EventKind.NOTIFICATION, "com.whatsapp", "Hi", now))
         val queued = gate.take("chat").single()
@@ -66,7 +66,7 @@ class EventDispatchTest {
     fun dispatchWaitsForAutomationsStillLoading() = runTest {
         val saved = Automations(
             MemoryBackend(), RecordingAlarms(), testAutomationsConfig, EpochClock { now }, IdGenerator { "x" }, { zone }, this,
-        ).draft("bank", "Do it").copy(id = "bank", schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")))
+        ).draft("bank", "Do it").copy(id = "bank", schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")), tools = emptySet())
         val slow = object : app.whittle.automations.AutomationBackend {
             override suspend fun load(): List<Automation> {
                 kotlinx.coroutines.delay(5_000)

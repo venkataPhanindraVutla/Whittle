@@ -57,7 +57,7 @@ class AutomationsTest {
     @Test
     fun rescheduleAllSetsDrainAlarmForQueuedEvents() = runTest {
         val automations = automations(mapOf("sms" to now + 90_000, "gone" to now + 1_000))
-        val sms = automations.draft("Bank", "Log it").copy(id = "sms", schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")))
+        val sms = automations.draft("Bank", "Log it").copy(id = "sms", schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")), tools = emptySet())
         automations.save(sms)
         automations.rescheduleAll()
         assertEquals(listOf(Alarm("sms", now + 90_000, now + 90_000, retry = true)), alarms.set)
@@ -69,7 +69,7 @@ class AutomationsTest {
     @Test
     fun disablingAnEventAutomationCancelsEverything() = runTest {
         val automations = automations()
-        val sms = automations.draft("Bank", "Log it").copy(id = "sms", schedule = null, trigger = Trigger.Sms())
+        val sms = automations.draft("Bank", "Log it").copy(id = "sms", schedule = null, trigger = Trigger.Sms(), tools = emptySet())
         automations.save(sms)
         automations.setEnabled("sms", false)
         assertEquals(listOf("sms"), alarms.cancelled)
@@ -78,7 +78,7 @@ class AutomationsTest {
     @Test
     fun eventAutomationSetsNoAlarm() = runTest {
         val automations = automations()
-        val event = automations.draft("Bank", "Log it").copy(schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")))
+        val event = automations.draft("Bank", "Log it").copy(schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")), tools = emptySet())
         assertTrue(event.isEvent)
         val saved = assertIs<SaveResult.Saved>(automations.save(event))
         assertNull(saved.nextRunMillis)
@@ -238,9 +238,30 @@ class AutomationsTest {
     }
 
     @Test
+    fun `a text or a notification has no web`() = runTest {
+        val automations = automations()
+        val sms = automations.draft("News", "Look it up").copy(schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")), tools = setOf("web_fetch"))
+        assertEquals(AutomationProblem.TOOL_NOT_ALLOWED, refusal(automations.save(sms)))
+        assertEquals(AutomationProblem.TOOL_NOT_ALLOWED, refusal(automations.save(sms.copy(trigger = Trigger.Notification("com.bank", "Bank")))))
+        // An automation stored before the rule still runs without it.
+        assertEquals(setOf(ToolId("calendar_events"), ToolId("update_plan")), automations.preApprovedTools(sms.copy(tools = setOf("web_fetch", "calendar_events"))))
+        // Plugging in carries nothing anyone else wrote.
+        assertIs<SaveResult.Saved>(automations.save(sms.copy(trigger = Trigger.Charging(Edge.START))))
+    }
+
+    @Test
+    fun `wifi on any network changes nothing unasked, a named one may`() = runTest {
+        val automations = automations()
+        val any = automations.draft("Join", "Do it").copy(schedule = null, trigger = Trigger.Wifi(null, Edge.START), tools = setOf("write_file"))
+        assertEquals(AutomationProblem.TOOL_NOT_ALLOWED, refusal(automations.save(any)))
+        assertEquals(setOf(ToolId("update_plan")), automations.preApprovedTools(any))
+        assertIs<SaveResult.Saved>(automations.save(any.copy(trigger = Trigger.Wifi("Home", Edge.START))))
+    }
+
+    @Test
     fun `a recipe that acts on bank texts needs a sender`() = runTest {
         val automations = automations()
-        val bank = automations.draft("Bank", "Log it").copy(schedule = null, trigger = Trigger.Sms(words = listOf("debited"), senderRequired = true))
+        val bank = automations.draft("Bank", "Log it").copy(schedule = null, trigger = Trigger.Sms(words = listOf("debited"), senderRequired = true), tools = emptySet())
         assertEquals(AutomationProblem.SENDER_REQUIRED, refusal(automations.save(bank)))
         assertEquals(AutomationProblem.SENDER_REQUIRED, refusal(automations.save(bank.copy(trigger = Trigger.Sms(listOf(" "), senderRequired = true)))))
         assertIs<SaveResult.Saved>(automations.save(bank.copy(trigger = Trigger.Sms(listOf("HDFCBK"), listOf("debited"), senderRequired = true))))

@@ -209,11 +209,12 @@ class Automations(
 
     /**
      * What a run of [automation] may use without asking. Only tools automations.json lets the user choose count, and
-     * one started by a message never changes anything unasked, whatever was stored before that rule.
+     * one started by a message never reads the web, and one whose events someone else can write never changes anything,
+     * unasked, whatever was stored before that rule.
      */
     fun preApprovedTools(automation: Automation): Set<ToolId> {
         val chosen = automation.tools.intersect(config.choosableToolIds)
-        val allowed = if (automation.trigger?.readsMessages == true) chosen - config.writingToolIds else chosen
+        val allowed = chosen - config.refusedToolIds(automation.trigger)
         return (allowed + config.alwaysPreApproved).map(::ToolId).toSet()
     }
 
@@ -242,8 +243,8 @@ class Automations(
         automation.prompt.isEmpty() -> AutomationProblem.PROMPT_EMPTY
         automation.prompt.length > config.maxPromptChars -> AutomationProblem.PROMPT_TOO_LONG
         !config.choosableToolIds.containsAll(automation.tools) -> AutomationProblem.TOOL_NOT_ALLOWED
-        // What a stranger texts mustn't change the workspace: a run on a message only reads.
-        automation.trigger?.readsMessages == true && automation.tools.any { it in config.writingToolIds } -> AutomationProblem.TOOL_NOT_ALLOWED
+        // What a stranger texts, or a Wi-Fi network's name, mustn't change the workspace; a text mustn't send what it read to the web.
+        automation.tools.any { it in config.refusedToolIds(automation.trigger) } -> AutomationProblem.TOOL_NOT_ALLOWED
         automation.trigger is Trigger.Sms && automation.trigger.senderRequired && automation.trigger.senders.none { it.isNotBlank() } ->
             AutomationProblem.SENDER_REQUIRED
         automation.project != null && !ChatProjects.isValidName(automation.project) -> AutomationProblem.PROJECT_INVALID

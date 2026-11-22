@@ -45,7 +45,7 @@ internal val testAutomationsConfig = AutomationsConfig(
     startTimeoutMillis = 1_000,
     alwaysPreApproved = listOf("update_plan"),
     tools = listOf(
-        AutomationToolChoice(key = "web", icon = "travel_explore", label = "Web", toolIds = listOf("web_search", "web_fetch"), default = true),
+        AutomationToolChoice(key = "web", icon = "travel_explore", label = "Web", toolIds = listOf("web_search", "web_fetch"), default = true, web = true),
         AutomationToolChoice(key = "calendar", icon = "calendar_month", label = "Calendar", toolIds = listOf("calendar_events"), default = false),
         AutomationToolChoice(key = "changeFiles", icon = "edit_document", label = "Change files", toolIds = listOf("write_file"), default = false, writes = true),
     ),

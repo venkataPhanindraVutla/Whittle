@@ -60,11 +60,15 @@ sealed interface Trigger {
     }
 }
 
-/**
- * Started by what someone else wrote (a text, a notification), so its runs read untrusted content and may only read.
- * Places, charging and Wi-Fi carry nothing anyone can write.
- */
+/** Started by what someone else wrote (a text, a notification), so its runs read untrusted content and have no web. */
 val Trigger.readsMessages: Boolean get() = this is Trigger.Sms || this is Trigger.Notification
+
+/**
+ * Its events hold words someone else can write, so its runs change nothing unasked: a message, and Wi-Fi on any
+ * network, whose name is set by whoever runs the network (a named network is one the user chose, so it keeps writes).
+ * Places and charging carry nothing anyone can write.
+ */
+val Trigger.refusesWrites: Boolean get() = readsMessages || (this is Trigger.Wifi && network == null)
 
 /**
  * What the phone must grant before this trigger can work, from [byType]: automations.json's events.capabilities, by the

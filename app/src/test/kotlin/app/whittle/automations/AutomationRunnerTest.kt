@@ -36,7 +36,7 @@ class AutomationRunnerTest {
     ).value
 
     private suspend fun Automations.savedEvent(): Automation {
-        val draft = draft("Bank", "Log the spend").copy(schedule = null, trigger = Trigger.Sms(senders = listOf("HDFCBK")))
+        val draft = draft("Bank", "Log the spend").copy(schedule = null, trigger = Trigger.Sms(senders = listOf("HDFCBK")), tools = emptySet())
         val result = assertIs<SaveResult.Saved>(save(draft))
         alarms.set.clear()
         return result.automation
@@ -254,7 +254,7 @@ class AutomationRunnerTest {
     }
 
     private suspend fun Automations.savedWith(trigger: Trigger): Automation {
-        val result = assertIs<SaveResult.Saved>(save(draft("Watch", "React").copy(schedule = null, trigger = trigger)))
+        val result = assertIs<SaveResult.Saved>(save(draft("Watch", "React").copy(schedule = null, trigger = trigger, tools = emptySet())))
         alarms.set.clear()
         return result.automation
     }
