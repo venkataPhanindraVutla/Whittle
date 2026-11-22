@@ -799,7 +799,7 @@
     "storage": {
       "icon": "folder",
       "title": "Let Whittle see your files?",
-      "body": "Names and sizes are shared, not what's in them.",
+      "body": "Read and write for the whole app. Finding duplicates reads file contents.",
       "approve": "Allow",
       "decline": "Not now",
       "grantedOutcome": "Files allowed",
