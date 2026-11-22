@@ -13,7 +13,9 @@ import app.whittle.core.config.ConfigFiles
 import app.whittle.core.config.ConfigLoader
 import app.whittle.core.config.MemoryPolicy
 import app.whittle.settings.MemoryReviewDefaults
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -244,5 +246,35 @@ class MemorySuggestionsTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `a delete during a save cannot leave the deleted chat's suggestion on disk`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : SuggestionsBackend {
+            var saved = SuggestionsState(emptyList(), emptyList(), emptyMap())
+
+            override suspend fun load() = saved
+
+            override suspend fun save(state: SuggestionsState): Outcome<Unit> {
+                saved = state
+                gate.await()
+                return Outcome.Success(Unit)
+            }
+        }
+        val s = MemorySuggestions(slow, memory(this), review, EpochClock { 9L }, ids, this) { it !in deleted }
+        val adding = launch { s.add("chat", listOf("Likes tea" to null)) }
+        testScheduler.runCurrent()
+        // The review is cancelled with the chat while the file is being written.
+        adding.cancel()
+        deleted += "chat"
+        val forgetting = launch { s.forgetChat("chat") }
+        testScheduler.runCurrent()
+        gate.complete(Unit)
+        adding.join()
+        forgetting.join()
+
+        assertTrue(s.pending.value.isEmpty())
+        assertTrue(slow.saved.pending.isEmpty(), "the file must not keep it")
     }
 }

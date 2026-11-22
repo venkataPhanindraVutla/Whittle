@@ -9,12 +9,14 @@ import app.whittle.core.common.Outcome
 import app.whittle.core.common.map
 import app.whittle.settings.MemoryReviewDefaults
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** A fact the review proposes, waiting for the user; [replaces] is the id of a memory it would rewrite. */
@@ -44,7 +46,9 @@ interface SuggestionsBackend {
  * remembered, already waiting or dismissed before are never proposed again; [seen] lets the review tell the model, so
  * it doesn't propose them in other words either. Dismissed texts and reviewed chats are capped by [limits], oldest
  * dropped first. A review that ends after its chat was deleted adds nothing: [add] and [markReviewed] ask [chatExists]
- * under the same lock [forgetChat] takes, and a chat is forgotten only after it's deleted.
+ * under the same lock [forgetChat] takes, and a chat is forgotten only after it's deleted. Both run to the end once
+ * they hold the lock, even if their review is cancelled: a save cut short could still reach the disk without the in-memory
+ * state knowing, and [forgetChat] would have nothing to remove.
  */
 class MemorySuggestions(
     private val backend: SuggestionsBackend,
@@ -72,8 +76,8 @@ class MemorySuggestions(
      * Adds each (text, id of the memory it would replace) the user hasn't seen. Texts longer than a memory may be are
      * skipped: keeping them would fail anyway.
      */
-    suspend fun add(chatId: String, facts: List<Pair<String, String?>>): Outcome<Unit> = changes.withLock {
-        if (!chatExists(chatId)) return@withLock Outcome.Success(Unit)
+    suspend fun add(chatId: String, facts: List<Pair<String, String?>>): Outcome<Unit> = uninterrupted {
+        if (!chatExists(chatId)) return@uninterrupted Outcome.Success(Unit)
         val current = load()
         val known = (memory.current().map { it.text } + current.pending.map { it.text }).map(::normal).toMutableSet()
         known += current.dismissed
@@ -147,13 +151,15 @@ class MemorySuggestions(
     /** How many of the user's words [chatId] had when it was last reviewed; 0 if never. */
     suspend fun reviewedCount(chatId: String): Int = load().reviewedUserWords[chatId] ?: 0
 
-    suspend fun markReviewed(chatId: String, userWords: Int): Outcome<Unit> = changes.withLock {
-        if (!chatExists(chatId)) return@withLock Outcome.Success(Unit)
+    suspend fun markReviewed(chatId: String, userWords: Int): Outcome<Unit> = uninterrupted {
+        if (!chatExists(chatId)) return@uninterrupted Outcome.Success(Unit)
         val current = load()
         val reviewed = (current.reviewedUserWords - chatId + (chatId to userWords)).entries.toList()
             .takeLast(limits.maxReviewedChats).associate { it.key to it.value }
         save(current.copy(reviewedUserWords = reviewed))
     }
+
+    private suspend fun <T> uninterrupted(body: suspend () -> T): T = changes.withLock { withContext(NonCancellable) { body() } }
 
     private suspend fun load(): SuggestionsState {
         loaded.await()
