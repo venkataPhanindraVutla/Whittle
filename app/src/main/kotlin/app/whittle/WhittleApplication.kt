@@ -85,14 +85,14 @@ class WhittleApplication : Application() {
     /** Starts automations in [chat] when they're due, or when the user taps Run now. */
     val automationRunner: AutomationRunner by lazy {
         AutomationRunner(
-            graph.automations, SessionAutomationChat(chat), graph.clock, inForeground = { inForeground }, protect = ::startRunService,
+            graph.automations, SessionAutomationChat(chat, graph.currentSettings), graph.clock, inForeground = { inForeground }, protect = ::startRunService,
             gate = graph.eventGate, messages = graph.agentMessages, maxPastedChars = graph.maxPastedOutputChars,
         )
     }
 
     /** Where the SMS receiver and the notification listener hand events, so they reach the runner. */
     val eventDispatch: EventDispatch by lazy {
-        EventDispatch(graph.automations, graph.eventGate, eventSources::allows) { automationRunner.eventsArrived(it) }
+        EventDispatch(graph.automations, graph.eventGate, eventSources::allows, eventSources::awaitSettings) { automationRunner.eventsArrived(it) }
     }
 
     /** Turns the text receiver, the notification listener and the phone watch on and off with the triggers that need them. */
@@ -120,6 +120,7 @@ class WhittleApplication : Application() {
             scheduler = AndroidPhoneScheduler(this, events, reader),
             clock = graph.clock,
             allows = eventSources::allows,
+            ready = eventSources::awaitSettings,
         )
     }
 

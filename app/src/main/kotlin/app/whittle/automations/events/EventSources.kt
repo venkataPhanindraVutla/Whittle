@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -35,15 +37,16 @@ fun sourceNeeds(triggers: List<Trigger>) = SourceNeeds(
 
 /**
  * Whether [trigger] may run: everything it needs ([byType], automations.json's events.capabilities) is [granted], and no
- * switch in Settings › On this phone that covers one of them is in [off].
+ * switch in Settings › On this phone that covers one of them is in [off]. A null [off] is settings not loaded yet:
+ * nothing is known to be on, so nothing runs, however little it needs.
  */
 fun triggerAllowed(
     trigger: Trigger,
     byType: Map<String, List<String>>,
     switches: List<PhoneActionsConfig.Switch>,
-    off: Set<String>,
+    off: Set<String>?,
     granted: (String) -> Boolean,
-): Boolean = trigger.capabilities(byType).all { capabilityAllowed(it, switches, off, granted) }
+): Boolean = off != null && trigger.capabilities(byType).all { capabilityAllowed(it, switches, off, granted) }
 
 /** Whether [capability] is [granted] and no switch that covers it is in [off]. */
 fun capabilityAllowed(capability: String, switches: List<PhoneActionsConfig.Switch>, off: Set<String>, granted: (String) -> Boolean): Boolean =
@@ -72,16 +75,25 @@ class EventSources(
     /** The apps whose notifications may start an automation now; null until the saved automations have loaded. */
     val notificationApps: StateFlow<Set<String>?> = _notificationApps.asStateFlow()
 
-    /** Whether [trigger] may run with what's granted and switched on now. */
+    /**
+     * Whether [trigger] may run with what's granted and switched on now. Until the settings have loaded nothing is known
+     * to be switched on, so nothing may: see [awaitSettings].
+     */
     fun allows(trigger: Trigger): Boolean =
-        triggerAllowed(trigger, automations.config.events.capabilities, switches, settings.value?.phoneOff.orEmpty(), granted)
+        triggerAllowed(trigger, automations.config.events.capabilities, switches, settings.value?.phoneOff, granted)
+
+    /** Waits for the settings, which a process woken by a text, a job or an alert doesn't have yet. */
+    suspend fun awaitSettings() {
+        settings.filterNotNull().first()
+    }
 
     /** Reads what's granted again: after a permission prompt, and when the user comes back from Android's settings. */
     fun recheck() = _checks.update { it + 1 }
 
+    /** Follows the settings once they've loaded; until then what the sources were left as stands. */
     fun start(scope: CoroutineScope): Job = scope.launch {
         automations.loadedAll()
-        combine(automations.all, settings, checks) { all, _, _ -> sourceNeeds(allowedTriggers(all, ::allows)) }
+        combine(automations.all, settings.filterNotNull(), checks) { all, _, _ -> sourceNeeds(allowedTriggers(all, ::allows)) }
             .distinctUntilChanged()
             .collect { apply(it) }
     }

@@ -50,11 +50,16 @@ class PhoneStateWatch(
     private val scheduler: PhoneScheduler,
     private val clock: EpochClock,
     private val allows: (Trigger) -> Boolean = { true },
+    /** Returns once the settings are known, which a woken process lacks; looking before would find nothing allowed and forget the last state. */
+    private val ready: suspend () -> Unit = {},
 ) {
     private val lock = Mutex()
 
     /** Arms what the saved automations need: when they or what the phone allows change, and on a wake in a fresh process. */
-    suspend fun arm() = arm(needs())
+    suspend fun arm() {
+        ready()
+        arm(needs())
+    }
 
     private suspend fun arm(needs: PhoneNeeds) = lock.withLock {
         // Nothing watched means nothing saved: watching later starts from where things stand then.
@@ -70,6 +75,7 @@ class PhoneStateWatch(
 
     /** Reads the phone, dispatches what changed since the last look, saves it, and arms again (a charging job runs once). */
     suspend fun check() = lock.withLock {
+        ready()
         val needs = needs()
         if (needs.any) {
             val before = store.load()?.let { baselined(it, needs) }
@@ -84,6 +90,7 @@ class PhoneStateWatch(
 
     /** A proximity alert said the phone entered or left the place whose [Trigger.Place.alertId] is [id]; its name is looked up here. */
     suspend fun placeCrossed(id: String, entering: Boolean) = lock.withLock {
+        ready()
         val needs = needs()
         val name = needs.places.firstOrNull { it.alertId == id }?.name ?: return@withLock
         val before = store.load()?.let { baselined(it, needs) }

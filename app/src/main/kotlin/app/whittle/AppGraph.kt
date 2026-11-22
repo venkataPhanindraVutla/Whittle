@@ -325,7 +325,7 @@ class AppGraph(context: Context) {
     /** What each chat's agent changed in the workspace, for the file browser's Changes. */
     val fileChanges = FileChangeLog(File(context.filesDir, appDefaults.files.changesDirectoryName), workspaces)
 
-    /** The user's settings, kept current; null until the saved choices have loaded. */
+    /** The user's settings, kept current; null until the saved choices have loaded, when nothing counts as switched on. */
     val currentSettings: StateFlow<UserSettings?> = settings.settings.stateIn(appScope, SharingStarted.Eagerly, null)
 
     init {
@@ -426,7 +426,7 @@ class AppGraph(context: Context) {
         ToolRegistry(
             ToolCatalog.create(
                 context, clock, httpClient, workspaceTools(), harness.agent.maxPlanItems, connectors, memory, agentMessages, scheduleTask(), watchFor(context),
-                PhoneTools(phoneActions, reminders, workspaces, healthConnect) { id -> currentSettings.value?.phoneOff?.contains(id) != true },
+                PhoneTools(phoneActions, reminders, workspaces, healthConnect) { id -> currentSettings.value?.let { id !in it.phoneOff } == true },
                 createApp,
                 buildApp,
             ),

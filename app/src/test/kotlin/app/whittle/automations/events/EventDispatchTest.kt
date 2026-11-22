@@ -15,7 +15,10 @@ import app.whittle.automations.testCodeMaskConfig
 import app.whittle.automations.testEventsConfig
 import app.whittle.core.common.EpochClock
 import app.whittle.core.common.IdGenerator
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.time.ZoneId
 import kotlin.test.Test
@@ -47,6 +50,27 @@ class EventDispatchTest {
 
         assertEquals(listOf("bank"), arrived)
         assertEquals(setOf("bank"), gate.pending().keys)
+    }
+
+    @Test
+    fun aWokenProcessWaitsForTheSettingsBeforeJudgingAnEvent() = runTest {
+        val automations = Automations(
+            MemoryBackend(), RecordingAlarms(), testAutomationsConfig, EpochClock { now }, IdGenerator { "x" }, { zone }, this,
+        )
+        automations.save(automations.draft("bank", "Do it").copy(id = "bank", schedule = null, trigger = Trigger.Sms(listOf("HDFCBK")), tools = emptySet()))
+        val gate = EventGate(MemoryEventBackend(), testEventsConfig, CodeMask(testCodeMaskConfig), EpochClock { now }, { zone }, this)
+        var loaded = false
+        val settings = CompletableDeferred<Unit>()
+        val arrived = mutableListOf<String>()
+        // Until the settings load nothing is allowed; the event isn't dropped, it waits.
+        val dispatch = EventDispatch(automations, gate, { loaded }, { settings.await() }) { arrived += it }
+        val waiting = launch { dispatch.dispatch(PhoneEvent(EventKind.SMS, "HDFCBK", "Spent 10", now)) }
+        runCurrent()
+        assertEquals(emptyList(), arrived)
+        loaded = true
+        settings.complete(Unit)
+        waiting.join()
+        assertEquals(listOf("bank"), arrived)
     }
 
     @Test

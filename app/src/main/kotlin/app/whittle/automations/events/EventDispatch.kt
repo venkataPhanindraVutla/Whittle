@@ -17,9 +17,12 @@ class EventDispatch(
     private val gate: EventGate,
     /** Whether a trigger may run: what it needs is granted and its switch in Settings is on. */
     private val allows: (Trigger) -> Boolean,
+    /** Returns once the settings are known, which a process woken by an event doesn't have yet; [allows] says no before. */
+    private val ready: suspend () -> Unit = {},
     private val eventsArrived: suspend (String) -> Unit,
 ) {
     suspend fun dispatch(event: PhoneEvent) {
+        ready()
         for (automation in automations.loadedAll()) {
             val trigger = automation.trigger
             if (!automation.enabled || !automation.isEvent || trigger == null || !allows(trigger)) continue

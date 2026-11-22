@@ -37,6 +37,13 @@ class EventSourcesTest {
     }
 
     @Test
+    fun `before the settings load nothing is allowed, even what needs nothing`() {
+        assertFalse(triggerAllowed(Trigger.Sms(), byType, switches, off = null) { true })
+        assertFalse(triggerAllowed(Trigger.Charging(Edge.START), byType, switches, off = null) { true })
+        assertTrue(triggerAllowed(Trigger.Charging(Edge.START), byType, switches, off = emptySet()) { true })
+    }
+
+    @Test
     fun `the text receiver and the listener are wanted only for enabled automations that may run`() {
         val all = listOf(
             automation("brief", null),
