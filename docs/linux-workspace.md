@@ -122,6 +122,8 @@ proot -r <rootfs> -b /dev -b /proc -b /sys -b <workspace>:/workspace -w /workspa
   That's why the Storage switch starts off until the user turns it on, and why `BundledAppConfigTest` fails if a
   device mount or proot option reaches shared storage. Whether a guest can get there some other way (such as
   `/proc/<pid>/root`) can only be checked on a phone, as above; check it again when proot or the mounts change.
+  `LinuxWorkspaceTest.sharedStorageIsUnreachableFromCommandsEvenWhenStorageIsAllowed` probes `/sdcard`, `/storage/emulated/0` and
+  `/proc/<app pid>/root/...` from a real guest; run it on a phone with Storage allowed.
 - The guest runs as fake root (`proot -0`), so apt works. That gives no extra power outside the guest.
 
 ## Shared workspace and projects

@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.whittle.WhittleApplication
 import app.whittle.core.common.Outcome
+import app.whittle.tools.android.AndroidCapabilities
 import app.whittle.tools.api.WorkspaceId
 import app.whittle.tools.workspace.CommandResult
 import app.whittle.tools.workspace.CommandRunner
@@ -130,6 +131,32 @@ class LinuxWorkspaceTest {
     fun commandsCantOpenWhittlesMemoryFile() = runBlocking<Unit> {
         val result = run("cat /proc/$appPid/mem > /dev/null 2>&1 && echo readable || echo refused")
         assertNotEquals("readable", result.stdout.trim(), "Whittle's /proc/<pid>/mem must not be readable from a command")
+    }
+
+    /**
+     * With Storage allowed, Android grants it to the whole app and proot runs inside the app, so nothing of shared
+     * storage may be reachable from `run_command`. Allow Storage in Settings › On this phone before running this: without
+     * the grant the probe would pass whatever the guest can see.
+     */
+    @Test
+    fun sharedStorageIsUnreachableFromCommandsEvenWhenStorageIsAllowed() = runBlocking<Unit> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assertTrue(
+            AndroidCapabilities.isGranted(context, AndroidCapabilities.STORAGE),
+            "Allow Storage in Settings > On this phone first, or this test proves nothing",
+        )
+        val script = """
+            import os
+            for path in ["/sdcard", "/storage/emulated/0", "/proc/$appPid/root/storage/emulated/0", "/proc/$appPid/root/sdcard", "/proc/1/root/sdcard", "/proc/self/root/storage/emulated/0"]:
+                try:
+                    names = os.listdir(path)
+                    print("reachable", path, len(names))
+                except OSError as error:
+                    print("unreachable", path, error.errno)
+        """.trimIndent()
+        val lines = python(script).stdout.trim().lines()
+        assertEquals(6, lines.size, lines.toString())
+        assertTrue(lines.all { it.startsWith("unreachable ") }, "shared storage reachable from a command: $lines")
     }
 
     @Test
