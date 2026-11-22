@@ -41,6 +41,8 @@
       "amountPattern": "[\\d,]+\\.\\d{2}",
       "datePattern": "\\d{2}[-/]\\d{2}[-/]\\d{2,4}",
       "currencyBeforePattern": "(?<!\\p{L})(?:rs\\.?|₹|inr)\\s*$",
+      "maskedAccountPattern": "(?:(?<![\\p{L}\\p{N}])x+|\\*+|•+)\\s?\\d{3,6}",
+      "referenceLabelPattern": "(?<![\\p{L}\\p{N}])(?:ref(?:erence)?|awb|order|txn|trn|utr|rrn|id|a/c|acc(?:oun)?t|card|ending|invoice|tracking)\\.?(?:\\s*(?:no\\.?|number|id|#))?\\s*[:#.-]?\\s*$",
       "loneCodeDigits": 6,
       "shortMessageWords": 12
     }
@@ -51,7 +53,8 @@
       "icon": "travel_explore",
       "label": "Read web pages",
       "toolIds": ["web_fetch"],
-      "default": true
+      "default": true,
+      "web": true
     },
     {
       "key": "clock",
@@ -152,9 +155,9 @@
     {
       "icon": "payments",
       "name": "Log bank texts",
-      "prompt": "A bank text just arrived. From it, take the date, the amount, the merchant and whether it was a debit or a credit, and append them as one CSV line (date,amount,merchant,debit or credit) to expenses.csv. If expenses.csv doesn't exist, create it first with the header date,amount,merchant,type. Never mention or log any code or one-time password.",
+      "prompt": "A bank text just arrived. Reply with one line from it: the date, the amount, the merchant and whether it was a debit or a credit, as date,amount,merchant,debit or credit. Never mention any code or one-time password.",
       "trigger": {"type": "sms", "senders": [], "words": ["debited", "credited", "spent"], "senderRequired": true},
-      "tools": ["readFiles"]
+      "tools": []
     },
     {
       "icon": "package_2",
@@ -172,7 +175,3 @@
     }
   ]
 }
-      "maskedAccountPattern": "(?:(?<![\\p{L}\\p{N}])x+|\\*+|•+)\\s?\\d{3,6}",
-      "referenceLabelPattern": "(?<![\\p{L}\\p{N}])(?:ref(?:erence)?|awb|order|txn|trn|utr|rrn|id|a/c|acc(?:oun)?t|card|ending|invoice|tracking)\\.?(?:\\s*(?:no\\.?|number|id|#))?\\s*[:#.-]?\\s*$",
-      "maskedAccountPattern": "(?:(?<![\\p{L}\\p{N}])x+|\\*+|•+)\\s?\\d{3,6}",
-      "referenceLabelPattern": "(?<![\\p{L}\\p{N}])(?:ref(?:erence)?|awb|order|txn|trn|utr|rrn|id|a/c|acc(?:oun)?t|card|ending|invoice|tracking)\\.?(?:\\s*(?:no\\.?|number|id|#))?\\s*[:#.-]?\\s*$",
