@@ -173,7 +173,9 @@ class BundledAppConfigTest {
         assertTrue(storage.startsOff)
         assertFalse(phone.isOn("storage", off = emptySet(), on = emptySet()))
         assertEquals(listOf("storage"), storage.capabilities)
-        assertTrue(storage.tools.containsAll(listOf("storage_overview", "find_files", "delete_files", "open_app_storage")))
+        assertTrue(storage.tools.containsAll(listOf("storage_overview", "find_files", "delete_files")))
+        // It needs no permission, so it stays out from behind the switch that starts off, like open_app.
+        assertFalse("open_app_storage" in phone.switches.flatMap { it.tools })
         val missingIcons = phone.switches.map { it.icon }.toSet() - WhittleIcons.names
         assertTrue(missingIcons.isEmpty(), "Add these to design/system/icons/icons.txt: $missingIcons")
     }

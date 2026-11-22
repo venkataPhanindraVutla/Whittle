@@ -117,8 +117,7 @@
       "tools": [
         "storage_overview",
         "find_files",
-        "delete_files",
-        "open_app_storage"
+        "delete_files"
       ]
     }
   ],
