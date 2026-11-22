@@ -51,17 +51,18 @@ data class DecisionUi(
 
 /**
  * An inline card for a choice. It never blocks: the run keeps going around it, and the answer is
- * applied whenever the user taps, even after the run has finished. Announced politely, once.
+ * applied whenever the user taps, even after the run has finished. Announced politely, once, unless [announce] is off:
+ * a list of cards that are all there when the page opens would be read out one after another.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun DecisionCard(decision: DecisionUi, onApprove: () -> Unit, onDecline: () -> Unit, modifier: Modifier = Modifier, declineEnabled: Boolean = true) {
+fun DecisionCard(decision: DecisionUi, onApprove: () -> Unit, onDecline: () -> Unit, modifier: Modifier = Modifier, declineEnabled: Boolean = true, announce: Boolean = true) {
     val colors = MaterialTheme.colorScheme
     val haptics = WhittleTheme.haptics
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .semantics { liveRegion = LiveRegionMode.Polite }
+            .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier)
             .background(colors.surfaceContainerLow, RoundedCornerShape(WhittleRadius.xl))
             .padding(WhittleSpace.m),
         verticalArrangement = Arrangement.spacedBy(WhittleSpace.m),

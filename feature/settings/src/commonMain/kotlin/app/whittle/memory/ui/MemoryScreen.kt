@@ -114,6 +114,8 @@ private fun MemoryList(host: MemoryHost, onBack: () -> Unit, onOpen: (MemoryDraf
     val suggested = state.suggested
     val scope = rememberCoroutineScope()
     var keepIssue by remember { mutableStateOf<MemoryIssue?>(null) }
+    // A second tap while a keep is saving would find the suggestion already gone and say so.
+    var keeping by remember { mutableStateOf(false) }
     var showingMenu by remember { mutableStateOf(false) }
     var confirmingClear by remember { mutableStateOf(false) }
     val full = state.maxItems > 0 && memories.size >= state.maxItems
@@ -194,8 +196,17 @@ private fun MemoryList(host: MemoryHost, onBack: () -> Unit, onOpen: (MemoryDraf
                                         suggestion = suggestion,
                                         replaced = memories.firstOrNull { it.id == suggestion.replaces },
                                         onKeep = {
-                                            keepIssue = null
-                                            scope.launch { keepIssue = host.save(null, suggestion.text, suggestion.id) }
+                                            if (!keeping) {
+                                                keeping = true
+                                                keepIssue = null
+                                                scope.launch {
+                                                    try {
+                                                        keepIssue = host.save(null, suggestion.text, suggestion.id)
+                                                    } finally {
+                                                        keeping = false
+                                                    }
+                                                }
+                                            }
                                         },
                                         onEdit = { onOpen(MemoryDraft(null, suggestion.text, suggestion)) },
                                         onDismiss = {
@@ -301,6 +312,8 @@ private fun Suggestion(suggestion: SuggestedEntry, replaced: MemoryEntry?, onKee
         decision = decision,
         onApprove = onKeep,
         onDecline = onDismiss,
+        // They're all there when the page opens; TalkBack would read every one out.
+        announce = false,
         modifier = Modifier
             .clip(RoundedCornerShape(WhittleRadius.xl))
             .clickable(onClickLabel = stringResource(Res.string.memory_suggested_edit), role = Role.Button) { haptics.perform(WhittleHaptic.Tap); onEdit() }
@@ -416,14 +429,7 @@ private fun MemoryEditor(host: MemoryHost, draft: MemoryDraft, onClose: () -> Un
             bottom = WhittleSpace.xxxl,
             verticalArrangement = Arrangement.spacedBy(WhittleSpace.xxl),
         ) {
-            replaced?.let {
-                Text(
-                    stringResource(Res.string.memory_suggested_replaces, it.text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.userContent(),
-                )
-            }
+            replaced?.let { SupportingNote("info", stringResource(Res.string.memory_suggested_replaces, it.text), Modifier.userContent()) }
             WhittleFilledField(
                 value = text,
                 onValueChange = { text = if (state.maxItemChars > 0) it.take(state.maxItemChars) else it; issue = null },
