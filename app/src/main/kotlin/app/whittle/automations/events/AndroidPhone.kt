@@ -186,32 +186,32 @@ class AndroidPhoneScheduler(
         if (places == placesArmed) return
         val locations = context.getSystemService(LocationManager::class.java) ?: return
         val armed = prefs.getStringSet(ARMED_PLACES, emptySet()).orEmpty()
-        (armed - places.map { it.name }.toSet()).forEach { locations.removeProximityAlert(placeIntent(it)) }
+        (armed - places.map { it.alertId }.toSet()).forEach { locations.removeProximityAlert(placeIntent(it)) }
         val allowed = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val now = if (allowed) places else emptyList()
         // Adding an alert with the same address replaces the one before it, so a moved place needs no removal.
         var set = 0
         now.forEach { place ->
             try {
-                locations.addProximityAlert(place.latitude, place.longitude, place.radiusMeters.toFloat(), NO_EXPIRY, placeIntent(place.name))
+                locations.addProximityAlert(place.latitude, place.longitude, place.radiusMeters.toFloat(), NO_EXPIRY, placeIntent(place.alertId))
                 set++
             } catch (_: SecurityException) {
                 // Permission was taken away since the check.
             }
         }
-        (armed - now.map { it.name }.toSet()).forEach { locations.removeProximityAlert(placeIntent(it)) }
-        prefs.edit().putStringSet(ARMED_PLACES, now.map { it.name }.toSet()).apply()
+        (armed - now.map { it.alertId }.toSet()).forEach { locations.removeProximityAlert(placeIntent(it)) }
+        prefs.edit().putStringSet(ARMED_PLACES, now.map { it.alertId }.toSet()).apply()
         // Remembered only when every alert was set, so one skipped for a missing permission is tried again.
         if (set == places.size) placesArmed = places
     }
 
-    /** The place's name is in the address, since extras don't count when Android matches one alert to another. */
-    private fun placeIntent(name: String): PendingIntent = PendingIntent.getBroadcast(
+    /** The place's id is in the address, since extras don't count when Android matches one alert to another; never its name. */
+    private fun placeIntent(id: String): PendingIntent = PendingIntent.getBroadcast(
         context,
         0,
         Intent(context, PlaceReceiver::class.java)
-            .setData(Uri.Builder().scheme("whittle-place").authority(Uri.encode(name)).build())
-            .putExtra(PlaceReceiver.EXTRA_NAME, name),
+            .setData(Uri.Builder().scheme("whittle-place").authority(id).build())
+            .putExtra(PlaceReceiver.EXTRA_ID, id),
         PendingIntent.FLAG_UPDATE_CURRENT,
     )
 

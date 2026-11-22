@@ -5,6 +5,7 @@ import app.whittle.automations.EventKind
 import app.whittle.automations.PhoneEvent
 import app.whittle.automations.Trigger
 import kotlinx.serialization.Serializable
+import java.security.MessageDigest
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.pow
@@ -64,6 +65,16 @@ fun edges(before: PhoneState, after: PhoneState, places: List<Trigger.Place>, no
     (after.inside - before.inside).filter { it in known }.forEach { add(event(EventKind.PLACE, it, Edge.START)) }
     (before.inside - after.inside).filter { it in known }.forEach { add(event(EventKind.PLACE, it, Edge.END)) }
 }
+
+/**
+ * What names [this] place to Android in a proximity alert and the app's preferences, neither of which is encrypted: a
+ * hash of the name and point, so what they hold says nothing of where the user goes. The name is looked up again, from the
+ * encrypted automations, when an alert arrives.
+ */
+val Trigger.Place.alertId: String
+    get() = MessageDigest.getInstance("SHA-256").digest("$name|$latitude|$longitude".encodeToByteArray()).take(ALERT_ID_BYTES).joinToString("") { "%02x".format(it) }
+
+private const val ALERT_ID_BYTES = 12
 
 /** The names of the [places] a point is within the radius of. */
 fun insideOf(latitude: Double, longitude: Double, places: List<Trigger.Place>): Set<String> =

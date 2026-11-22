@@ -170,9 +170,9 @@ class PhoneStateWatchTest {
         val events = mutableListOf<PhoneEvent>()
         val watch = watch(fake, this, listOf(home), events = events)
 
-        watch.placeCrossed("Home", entering = true)
-        watch.placeCrossed("Home", entering = true)
-        watch.placeCrossed("Elsewhere", entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
+        watch.placeCrossed("not-a-place", entering = true)
 
         assertEquals(listOf(Edge.START), events.map { it.edge })
     }
@@ -210,7 +210,7 @@ class PhoneStateWatchTest {
         val events = mutableListOf<PhoneEvent>()
         val watch = watch(fake, this, listOf(home), events = events)
 
-        watch.placeCrossed("Home", entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
 
         assertTrue(events.isEmpty())
         assertEquals(setOf("Home"), fake.saved?.inside)
@@ -245,12 +245,12 @@ class PhoneStateWatchTest {
 
         watch.arm()
         assertEquals(setOf("Home"), fake.saved?.inside)
-        watch.placeCrossed("Home", entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
         assertTrue(events.isEmpty(), events.toString())
 
         // Leaving and coming back are real.
-        watch.placeCrossed("Home", entering = false)
-        watch.placeCrossed("Home", entering = true)
+        watch.placeCrossed(home.alertId, entering = false)
+        watch.placeCrossed(home.alertId, entering = true)
         assertEquals(listOf(Edge.END, Edge.START), events.map { it.edge })
     }
 
@@ -261,7 +261,7 @@ class PhoneStateWatchTest {
         val watch = watch(fake, this, listOf(Trigger.Place("Work", 1.0, 1.0, 100, Edge.START), home), events = events)
 
         watch.arm()
-        watch.placeCrossed("Home", entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
 
         assertEquals(setOf("Home"), fake.saved?.inside)
         assertEquals(setOf("Work", "Home"), fake.saved?.baselined)
@@ -276,8 +276,16 @@ class PhoneStateWatchTest {
 
         watch.arm()
         assertTrue(fake.saved?.baselined.orEmpty().isEmpty())
-        watch.placeCrossed("Home", entering = true)
+        watch.placeCrossed(home.alertId, entering = true)
 
         assertEquals(listOf(Edge.START), events.map { it.edge })
+    }
+
+    @Test
+    fun anAlertIsKnownByAnIdThatSaysNothingOfThePlace() {
+        val id = home.alertId
+        assertTrue("Home" !in id && "12.97" !in id && "77.59" !in id)
+        assertEquals(id, home.copy(edge = Edge.END).alertId)
+        assertTrue(id != home.copy(name = "Work").alertId && id != home.copy(latitude = 13.0).alertId)
     }
 }

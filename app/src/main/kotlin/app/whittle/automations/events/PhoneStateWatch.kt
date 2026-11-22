@@ -82,10 +82,10 @@ class PhoneStateWatch(
         scheduler.arm(needs)
     }
 
-    /** A proximity alert said the phone entered or left the place called [name]. */
-    suspend fun placeCrossed(name: String, entering: Boolean) = lock.withLock {
+    /** A proximity alert said the phone entered or left the place whose [Trigger.Place.alertId] is [id]; its name is looked up here. */
+    suspend fun placeCrossed(id: String, entering: Boolean) = lock.withLock {
         val needs = needs()
-        if (needs.places.none { it.name == name }) return@withLock
+        val name = needs.places.firstOrNull { it.alertId == id }?.name ?: return@withLock
         val before = store.load()?.let { baselined(it, needs) }
         if (before == null) {
             // Nothing seen yet, so this only records where things stand.
