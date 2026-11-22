@@ -7,7 +7,8 @@ import java.util.regex.Pattern
  * dropped whole, never stored. (Hiding the code and keeping the rest missed codes of letters and digits.) A number that
  * looks like a code ([CodeMaskConfig.codePattern]) counts when a keyword such as "OTP" is within
  * [CodeMaskConfig.nearChars] of it, and so does a code of letters and digits ([CodeMaskConfig.mixedCodePattern]).
- * Amounts and dates never count. When unsure it counts: a lone 6-digit number in a short message does even with no
+ * Amounts, dates, masked account numbers ("XX1234") and numbers a label calls a reference ("ref 845123") never count,
+ * unless a keyword stands right before the label. When unsure it counts: a lone 6-digit number in a short message does even with no
  * keyword.
  */
 class CodeMask(private val config: CodeMaskConfig) {
@@ -16,11 +17,13 @@ class CodeMask(private val config: CodeMaskConfig) {
     private val amount = Pattern.compile(config.amountPattern)
     private val date = Pattern.compile(config.datePattern)
     private val currencyBefore = Pattern.compile(config.currencyBeforePattern, Pattern.CASE_INSENSITIVE)
-    // A keyword starts a word but may carry a suffix ("codes", "passcodes"), so only its start is anchored.
-    private val keyword = Pattern.compile(
-        config.keywords.joinToString("|", prefix = "(?<![\\p{L}\\p{N}])(?:", postfix = ")") { Pattern.quote(it) },
-        Pattern.CASE_INSENSITIVE,
-    )
+    private val maskedAccount = Pattern.compile(config.maskedAccountPattern, Pattern.CASE_INSENSITIVE)
+    private val referenceLabel = Pattern.compile(config.referenceLabelPattern, Pattern.CASE_INSENSITIVE)
+    // A keyword is a whole word, with an optional plural: "pins" counts, "ping" and "codec" don't.
+    private val keywords = config.keywords.joinToString("|", prefix = "(?<![\\p{L}\\p{N}])(?:", postfix = ")s?(?![\\p{L}\\p{N}])") { Pattern.quote(it) }
+    private val keyword = Pattern.compile(keywords, Pattern.CASE_INSENSITIVE)
+    // A keyword that ends right where a label begins ("OTP ref 845123", "code is ref 845123").
+    private val keywordJustBefore = Pattern.compile("$keywords\\W*(?:is\\W+)?$", Pattern.CASE_INSENSITIVE)
 
     /**
      * Whether [text] seems to hold a one-time code: a number or a letters-and-digits code beside a keyword, a lone
@@ -59,7 +62,18 @@ class CodeMask(private val config: CodeMaskConfig) {
     }
 
     private fun isAmountOrDate(text: String, start: Int, end: Int): Boolean =
-        overlaps(amount, text, start, end) || overlaps(date, text, start, end) || currencyBefore.matcher(text).region(maxOf(0, start - CURRENCY_LOOKBACK), start).find()
+        overlaps(amount, text, start, end) || overlaps(date, text, start, end) || overlaps(maskedAccount, text, start, end) ||
+            currencyBefore.matcher(text).region(maxOf(0, start - CURRENCY_LOOKBACK), start).find() || isReference(text, start)
+
+    /** A number a label such as "ref" or "AWB" stands before, when no keyword stands right before that label. */
+    private fun isReference(text: String, start: Int): Boolean {
+        val from = maxOf(0, start - config.nearChars)
+        // Anchoring bounds stay on: both patterns end with $, which must match at the region's end.
+        val label = referenceLabel.matcher(text).region(from, start).useTransparentBounds(true)
+        if (!label.find()) return false
+        val before = keywordJustBefore.matcher(text).region(from, label.start()).useTransparentBounds(true)
+        return !before.find()
+    }
 
     private fun overlaps(pattern: Pattern, text: String, start: Int, end: Int): Boolean {
         val m = pattern.matcher(text)

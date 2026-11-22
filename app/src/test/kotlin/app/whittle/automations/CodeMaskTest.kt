@@ -40,6 +40,36 @@ class CodeMaskTest {
     }
 
     @Test
+    fun aBankTextWithTheOtpBoilerplateIsKept() {
+        listOf(
+            "Rs.500.00 debited from A/c XX1234 on 24-10-26 to VPA shop@ybl. Never share your OTP/PIN with anyone. Not you? Call 18002586161",
+            "Rs.500.00 debited from A/c **1234. Never share your OTP/PIN",
+            "Rs.500.00 debited from A/c XX1234. Never share your OTP, PIN or password",
+            "INR 420 spent on card ending 4821 at Zomato. Never share your OTP",
+            "Rs 450 paid at Zomato, UPI ref 845123. Never share your PIN",
+        ).forEach { assertFalse(mask.looksLikeCode(it), it) }
+    }
+
+    @Test
+    fun aReferenceNumberIsNotACode() {
+        assertFalse(mask.looksLikeCode("Your parcel AWB 123456 is out for delivery"))
+        assertFalse(mask.looksLikeCode("Payment received, ref 845123"))
+        assertFalse(mask.looksLikeCode("Txn ID: 845123"))
+        // A keyword right before the label keeps it a code.
+        assertTrue(mask.looksLikeCode("Your OTP ref 845123"))
+        assertTrue(mask.looksLikeCode("Your OTP for order 40781234 is 7781"))
+    }
+
+    @Test
+    fun keywordsAreWholeWords() {
+        assertFalse(mask.looksLikeCode("Ping me later", app = "com.whatsapp"))
+        assertFalse(mask.looksLikeCode("Is the codec ready? Pinterest link", app = "com.whatsapp"))
+        assertTrue(mask.looksLikeCode("My PIN is on the fridge", app = "com.whatsapp"))
+        assertTrue(mask.looksLikeCode("Your codes: 4821", app = null))
+        assertTrue(mask.looksLikeCode("Your login code is A7K29Q"))
+    }
+
+    @Test
     fun deliveryWithAnOrderNumberIsKept() {
         assertFalse(mask.looksLikeCode("Your order 40781234 is out for delivery"))
     }
@@ -77,6 +107,8 @@ class CodeMaskTest {
         assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(amountPattern = "(") }
         assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(datePattern = "(") }
         assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(currencyBeforePattern = "(") }
+        assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(maskedAccountPattern = "(") }
+        assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(referenceLabelPattern = "(") }
         assertFailsWith<IllegalArgumentException> { testCodeMaskConfig.copy(shortMessageWords = 0) }
     }
 }

@@ -43,7 +43,7 @@ sealed interface GateDecision {
     /** Not kept: the automation has run as often as it may today. */
     data object Dropped : GateDecision
 
-    /** Not kept, and not counted: it seems to hold a one-time code, which no run may see. */
+    /** Not kept, and no run counted: it seems to hold a one-time code, which no run may see. It shows as skipped on the row. */
     data object HeldBack : GateDecision
 }
 
@@ -69,7 +69,7 @@ class EventGate(
     private val _dropped = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val _saveError = MutableStateFlow<HarnessError?>(null)
 
-    /** Events dropped today per automation, for the list row. */
+    /** Events skipped today per automation (over the limit, or held back as a code), for the list row. */
     val dropped: StateFlow<Map<String, Int>> = _dropped.asStateFlow()
 
     /** Why the queue couldn't be written last time, or null. Events still run from memory, but a kill now would lose them. */
@@ -78,7 +78,12 @@ class EventGate(
     suspend fun offer(automationId: String, event: PhoneEvent): GateDecision = changes.withLock {
         // Judged with room past the cut, so a code just inside it still finds its keyword; the first cut bounds the work.
         val app = event.source.takeIf { event.kind == EventKind.NOTIFICATION }
-        if (mask.looksLikeCode(event.text.take(config.maxEventChars + config.codeMask.nearChars), app)) return@withLock GateDecision.HeldBack
+        if (mask.looksLikeCode(event.text.take(config.maxEventChars + config.codeMask.nearChars), app)) {
+            // Only a count is kept, so the user can see why nothing ran.
+            put(today(automationId).let { it.copy(droppedToday = it.droppedToday + 1) })
+            persist()
+            return@withLock GateDecision.HeldBack
+        }
         val kept = event.copy(text = event.text.take(config.maxEventChars))
         val queue = today(automationId)
         val decision = if (queue.runsToday >= config.maxRunsPerDay) {

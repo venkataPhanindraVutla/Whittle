@@ -140,6 +140,10 @@ data class CodeMaskConfig(
     val datePattern: String,
     /** What may stand just before a number to make it an amount (a currency sign or word); anchored at its end. */
     val currencyBeforePattern: String,
+    /** Masked account or card numbers ("XX1234", "**1234"), never codes; compiled ignoring case. */
+    val maskedAccountPattern: String,
+    /** What may stand just before a number to make it a reference, not a code ("ref", "AWB"); anchored at its end. */
+    val referenceLabelPattern: String,
     /** A lone number with this many digits is a code with no keyword, in a message of at most [shortMessageWords] words. */
     val loneCodeDigits: Int,
     val shortMessageWords: Int,
@@ -148,7 +152,8 @@ data class CodeMaskConfig(
         require(keywords.isNotEmpty() && keywords.all { it.isNotBlank() }) { "code keywords can't be empty" }
         require(nearChars > 0) { "code mask needs a distance" }
         require(loneCodeDigits > 0 && shortMessageWords > 0) { "code mask needs a digit count and a word count" }
-        mapOf("codePattern" to codePattern, "mixedCodePattern" to mixedCodePattern, "amountPattern" to amountPattern, "datePattern" to datePattern, "currencyBeforePattern" to currencyBeforePattern)
+        mapOf("codePattern" to codePattern, "mixedCodePattern" to mixedCodePattern, "amountPattern" to amountPattern, "datePattern" to datePattern, "currencyBeforePattern" to currencyBeforePattern,
+            "maskedAccountPattern" to maskedAccountPattern, "referenceLabelPattern" to referenceLabelPattern)
             .forEach { (name, pattern) -> require(runCatching { Regex(pattern) }.isSuccess) { "$name isn't a valid regular expression" } }
     }
 }

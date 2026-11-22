@@ -110,7 +110,9 @@ class EventGateTest {
         assertFalse(backend.stored.toString().contains("482913"))
         assertFalse(backend.stored.toString().contains("A7K29Q"))
         assertTrue(gate.take("a").isEmpty())
-        assertTrue(gate.dropped.value.isEmpty())
+        // The user sees the count on the row, never the text.
+        assertEquals(mapOf("a" to 2), gate.dropped.value)
+        assertFalse(backend.stored.toString().contains("Do not share"))
     }
 
     @Test
