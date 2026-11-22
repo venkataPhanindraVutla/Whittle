@@ -63,11 +63,11 @@ object AndroidCapabilities {
 
     /**
      * Whether Android granted [capability]; true when it needs nothing. Not for [HEALTH_CAPABILITIES]. Storage by the
-     * prompt counts as granted once reading is: deleting needs writing too, which the prompt asks for alongside.
+     * prompt needs both reading and writing, since the prompt asks for both and deleting needs writing.
      */
     fun isGranted(context: Context, capability: CapabilityId): Boolean = when {
-        capability != STORAGE -> permissionsFor(capability).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
-        storageGrant() == StorageGrant.PROMPT -> context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        capability != STORAGE || storageGrant() == StorageGrant.PROMPT ->
+            permissionsFor(capability).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
         else -> Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
     }
 }
